@@ -59,6 +59,18 @@ type WorkloadSpec struct {
 	// +kubebuilder:default=""
 	// +kubebuilder:validation:Enum=kueue.x-k8s.io/workloadpriorityclass;scheduling.k8s.io/priorityclass;""
 	PriorityClassSource string `json:"priorityClassSource,omitempty"`
+
+	// QueueingPolicy determines if a workload can be admitted into a queue.
+	// Changing the QueueingPolicy to Never does not evict or suspend workloads that are already running.
+	// Possible values are:
+	//
+	//   - Never: indicates that a workload should never be admitted
+	//   - Always: indicates that a workload can be evaluated for admission into it's respective queue.
+	//
+	// Defaults to Always
+	// +kubebuilder:validation:Enum={Never, Always}
+	// +kubebuilder:default="Always"
+	QueueingPolicy QueueingPolicyType `json:"queueingPolicy,omitempty"`
 }
 
 type Admission struct {
@@ -267,6 +279,10 @@ const (
 	// WorkloadEvictedByAdmissionCheck indicates that the workload was evicted
 	// beacuse at least one admission check transitioned to False.
 	WorkloadEvictedByAdmissionCheck = "AdmissionCheck"
+
+	// WorkloadEvictedByQueueingPolicy indicates that the workload was evicted
+	// because QueueingPolicy was set to Never.
+	WorkloadEvictedByQueueingPolicy = "QueueingPolicyNever"
 )
 
 // +genclient
@@ -295,6 +311,19 @@ type WorkloadList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Workload `json:"items"`
 }
+
+// QueueingPolicyType specifies if a suspended job should be queued.
+type QueueingPolicyType string
+
+const (
+	// QueueingPolicyTypeNever means that we don't queue a running workload
+	// after it was suspended
+	QueueingPolicyTypeNever QueueingPolicyType = "Never"
+
+	// QueueingPolicyTypeAlways means that a workload can be
+	// evaluated for admission into it's respective queue
+	QueueingPolicyTypeAlways QueueingPolicyType = "Always"
+)
 
 func init() {
 	SchemeBuilder.Register(&Workload{}, &WorkloadList{})

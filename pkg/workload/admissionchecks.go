@@ -33,6 +33,7 @@ func SyncAdmittedCondition(w *kueue.Workload) bool {
 	hasReservation := HasQuotaReservation(w)
 	hasAllChecksReady := HasAllChecksReady(w)
 	isAdmitted := IsAdmitted(w)
+	queueingPolicy := IsQueueingPolicyNever(w)
 
 	if isAdmitted == (hasReservation && hasAllChecksReady) {
 		return false
@@ -44,6 +45,10 @@ func SyncAdmittedCondition(w *kueue.Workload) bool {
 		Message: "The workload is admitted",
 	}
 	switch {
+	case !hasReservation && queueingPolicy:
+		newCondition.Status = metav1.ConditionFalse
+		newCondition.Reason = "QueueingDisabled"
+		newCondition.Message = "QueueingPolicy is Never"
 	case !hasReservation && !hasAllChecksReady:
 		newCondition.Status = metav1.ConditionFalse
 		newCondition.Reason = "NoReservationNoChecks"

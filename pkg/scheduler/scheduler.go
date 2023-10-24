@@ -291,6 +291,11 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 		cq := snap.ClusterQueues[w.ClusterQueue]
 		ns := corev1.Namespace{}
 		e := entry{Info: w}
+		// the workload cannot be nominated for admission if queuingPolicy is set to Never
+		if workload.IsQueueingPolicyNever(w.Obj) {
+			log.Info("Workload skipped from admission because its QueueingPolicy is set to Never", "workload", klog.KObj(w.Obj))
+			continue
+		}
 		if s.cache.IsAssumedOrAdmittedWorkload(w) {
 			log.Info("Workload skipped from admission because it's already assumed or admitted", "workload", klog.KObj(w.Obj))
 			continue

@@ -312,7 +312,18 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 	if job.IsSuspended() {
 		// start the job if the workload has been admitted, and the job is still suspended
 		if workload.IsAdmitted(wl) {
+			if workload.IsQueueingPolicyNever(wl) {
+				workload.UnsetQuotaReservationWithCondition(wl, "Pending", "QueueingPolicy is Never")
+				_ = workload.SyncAdmittedCondition(wl)
+				workload.SetEvictedCondition(wl, kueue.WorkloadEvictedByQueueingPolicy, "QueueingPolicy is set to Never")
+				err := workload.ApplyAdmissionStatus(ctx, r.client, wl, true)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("applying admission status: %w", err)
+				}
+				return ctrl.Result{}, err
+			}
 			log.V(2).Info("Job admitted, unsuspending")
+
 			err := r.startJob(ctx, job, object, wl)
 			if err != nil {
 				log.Error(err, "Unsuspending job")
@@ -610,8 +621,9 @@ func (r *JobReconciler) constructWorkload(ctx context.Context, job GenericJob, o
 			Finalizers: []string{kueue.ResourceInUseFinalizerName},
 		},
 		Spec: kueue.WorkloadSpec{
-			PodSets:   resetMinCounts(podSets),
-			QueueName: QueueName(job),
+			PodSets:        resetMinCounts(podSets),
+			QueueName:      QueueName(job),
+			QueueingPolicy: kueue.QueueingPolicyTypeAlways,
 		},
 	}
 

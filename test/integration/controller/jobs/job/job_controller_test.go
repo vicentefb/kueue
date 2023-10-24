@@ -1086,6 +1086,71 @@ var _ = ginkgo.Describe("Job controller interacting with scheduler", ginkgo.Orde
 		util.ExpectReservingActiveWorkloadsMetric(prodClusterQ, 1)
 	})
 
+	ginkgo.It("Modifying QueueingPolicy", func() {
+		ginkgo.By("creating localQueue")
+		devLocalQ = testing.MakeLocalQueue("dev-queue", ns.Name).ClusterQueue(devClusterQ.Name).Obj()
+		gomega.Expect(k8sClient.Create(ctx, devLocalQ)).Should(gomega.Succeed())
+
+		ginkgo.By("checking a job starts")
+		devJob := testingjob.MakeJob("dev-job", ns.Name).Queue(devLocalQ.Name).Request(corev1.ResourceCPU, "5").Obj()
+		gomega.Expect(k8sClient.Create(ctx, devJob)).Should(gomega.Succeed())
+		createdDevJob := &batchv1.Job{}
+		gomega.Eventually(func() *bool {
+			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: devJob.Name, Namespace: devJob.Namespace}, createdDevJob)).
+				Should(gomega.Succeed())
+			return createdDevJob.Spec.Suspend
+		}, util.Timeout, util.Interval).Should(gomega.Equal(ptr.To(false)))
+		gomega.Expect(createdDevJob.Spec.Template.Spec.NodeSelector[instanceKey]).Should(gomega.Equal(spotUntaintedFlavor.Name))
+		util.ExpectPendingWorkloadsMetric(devClusterQ, 0, 0)
+		util.ExpectReservingActiveWorkloadsMetric(devClusterQ, 1)
+
+		ginkgo.By("checking workload")
+		wl := &kueue.Workload{}
+		wlKey := types.NamespacedName{Name: workloadjob.GetWorkloadNameForJob(devJob.Name), Namespace: devJob.Namespace}
+		gomega.Expect(k8sClient.Get(ctx, wlKey, wl)).Should(gomega.Succeed())
+
+		ginkgo.By("switching QueueingPolicy from Always to Never")
+		wl.Spec.QueueingPolicy = kueue.QueueingPolicyTypeNever
+		gomega.Expect(k8sClient.Update(ctx, wl)).Should(gomega.Succeed())
+
+		ginkgo.By("switching suspend to true")
+		gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: devJob.Name, Namespace: devJob.Namespace}, createdDevJob)).Should(gomega.Succeed())
+		createdDevJob.Spec.Suspend = ptr.To(true)
+		gomega.Expect(k8sClient.Update(ctx, createdDevJob)).Should(gomega.Succeed())
+
+		ginkgo.By("checking it stays suspended")
+		gomega.Eventually(func() *bool {
+			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: devJob.Name, Namespace: devJob.Namespace}, createdDevJob)).
+				Should(gomega.Succeed())
+			return createdDevJob.Spec.Suspend
+		}, util.Timeout, util.Interval).Should(gomega.Equal(ptr.To(true)))
+
+		// Workload should stay pending and be evicted
+		util.ExpectWorkloadsToBePending(ctx, k8sClient, wl)
+		gomega.Consistently(func() bool {
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(wl), wl); err != nil {
+				return false
+			}
+			return workload.HasQuotaReservation(wl)
+		}, util.ConsistentDuration, util.Interval).Should(gomega.BeFalse())
+
+		util.FinishEvictionForWorkloads(ctx, k8sClient, wl)
+
+		ginkgo.By("checking the jobs becomes unsuspended after we update the QueueingPolicy back to Always")
+		gomega.Eventually(func() kueue.QueueingPolicyType {
+			gomega.Expect(k8sClient.Get(ctx, wlKey, wl)).Should(gomega.Succeed())
+			wl.Spec.QueueingPolicy = kueue.QueueingPolicyTypeAlways
+			gomega.Expect(k8sClient.Update(ctx, wl)).Should(gomega.Succeed())
+			return wl.Spec.QueueingPolicy
+		}, util.Timeout, util.Interval).Should(gomega.Equal(kueue.QueueingPolicyTypeAlways))
+
+		gomega.Eventually(func() *bool {
+			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: devJob.Name, Namespace: devJob.Namespace}, createdDevJob)).
+				Should(gomega.Succeed())
+			return createdDevJob.Spec.Suspend
+		}, util.Timeout, util.Interval).Should(gomega.Equal(ptr.To(false)))
+	})
+
 	ginkgo.It("Should unsuspend job iff localQueue is in the same namespace", func() {
 		ginkgo.By("create another namespace")
 		ns2 := &corev1.Namespace{

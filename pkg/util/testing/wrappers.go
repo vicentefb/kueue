@@ -64,6 +64,7 @@ func MakeWorkload(name, ns string) *WorkloadWrapper {
 	return &WorkloadWrapper{kueue.Workload{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Spec: kueue.WorkloadSpec{
+			QueueingPolicy: kueue.QueueingPolicyTypeAlways,
 			PodSets: []kueue.PodSet{
 				*MakePodSet("main", 1).Obj(),
 			},
@@ -99,6 +100,11 @@ func (w *WorkloadWrapper) Limit(r corev1.ResourceName, q string) *WorkloadWrappe
 
 func (w *WorkloadWrapper) Queue(q string) *WorkloadWrapper {
 	w.Spec.QueueName = q
+	return w
+}
+
+func (w *WorkloadWrapper) QueueingPolicy(q kueue.QueueingPolicyType) *WorkloadWrapper {
+	w.Spec.QueueingPolicy = q
 	return w
 }
 

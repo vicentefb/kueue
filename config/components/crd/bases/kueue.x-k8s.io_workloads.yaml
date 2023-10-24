@@ -8257,6 +8257,18 @@ spec:
                   is associated with. queueName cannot be changed while .status.admission
                   is not null.
                 type: string
+              queueingPolicy:
+                default: Always
+                description: "QueueingPolicy determines if a workload can be admitted
+                  into a queue. Changing the QueueingPolicy to Never does not evict
+                  or suspend workloads that are already running. Possible values are:
+                  \n - Never: indicates that a workload should never be admitted -
+                  Always: indicates that a workload can be evaluated for admission
+                  into it's respective queue. \n Defaults to Always"
+                enum:
+                - Never
+                - Always
+                type: string
             required:
             - podSets
             type: object

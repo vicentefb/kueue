@@ -417,3 +417,8 @@ func ReclaimablePodsAreEqual(a, b []kueue.ReclaimablePod) bool {
 func IsAdmitted(w *kueue.Workload) bool {
 	return apimeta.IsStatusConditionTrue(w.Status.Conditions, kueue.WorkloadAdmitted)
 }
+
+// Returns true if the workload has queuingPolicy set to Never.
+func IsQueueingPolicyNever(w *kueue.Workload) bool {
+	return w.Spec.QueueingPolicy == kueue.QueueingPolicyTypeNever
+}

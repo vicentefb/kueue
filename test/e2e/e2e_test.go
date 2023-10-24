@@ -259,6 +259,123 @@ var _ = ginkgo.Describe("Kueue", func() {
 		})
 	})
 
+	ginkgo.When("QueueingPolicy", func() {
+		var (
+			onDemandRF   *kueue.ResourceFlavor
+			spotRF       *kueue.ResourceFlavor
+			localQueue   *kueue.LocalQueue
+			clusterQueue *kueue.ClusterQueue
+		)
+		ginkgo.BeforeEach(func() {
+			onDemandRF = testing.MakeResourceFlavor("on-demand").
+				Label("instance-type", "on-demand").Obj()
+			gomega.Expect(k8sClient.Create(ctx, onDemandRF)).Should(gomega.Succeed())
+			spotRF = testing.MakeResourceFlavor("spot").
+				Label("instance-type", "spot").Obj()
+			gomega.Expect(k8sClient.Create(ctx, spotRF)).Should(gomega.Succeed())
+			clusterQueue = testing.MakeClusterQueue("cluster-queue").
+				ResourceGroup(
+					*testing.MakeFlavorQuotas("on-demand").
+						Resource(corev1.ResourceCPU, "1").
+						Resource(corev1.ResourceMemory, "1Gi").
+						Obj(),
+					*testing.MakeFlavorQuotas("spot").
+						Resource(corev1.ResourceCPU, "1").
+						Resource(corev1.ResourceMemory, "1Gi").
+						Obj(),
+				).
+				Preemption(kueue.ClusterQueuePreemption{
+					WithinClusterQueue: kueue.PreemptionPolicyLowerPriority,
+				}).
+				Obj()
+			gomega.Expect(k8sClient.Create(ctx, clusterQueue)).Should(gomega.Succeed())
+			localQueue = testing.MakeLocalQueue("main", ns.Name).ClusterQueue("cluster-queue").Obj()
+			gomega.Expect(k8sClient.Create(ctx, localQueue)).Should(gomega.Succeed())
+		})
+		ginkgo.AfterEach(func() {
+			gomega.Expect(util.DeleteLocalQueue(ctx, k8sClient, localQueue)).Should(gomega.Succeed())
+			gomega.Expect(util.DeleteAllJobsInNamespace(ctx, k8sClient, ns)).Should(gomega.Succeed())
+			util.ExpectClusterQueueToBeDeleted(ctx, k8sClient, clusterQueue, true)
+			util.ExpectResourceFlavorToBeDeleted(ctx, k8sClient, onDemandRF, true)
+			util.ExpectResourceFlavorToBeDeleted(ctx, k8sClient, spotRF, true)
+		})
+
+		ginkgo.It("Should evict a running job from the queue after QueueingPolicy is changed to Never and suspend to true", func() {
+			sampleJob = (&testingjob.JobWrapper{Job: *sampleJob}).Image("gcr.io/k8s-staging-perf-tests/sleep:v0.0.3", []string{"50s"}).Obj()
+			lookupKey1 := types.NamespacedName{Name: sampleJob.Name, Namespace: sampleJob.Namespace}
+			//createdJob1 := &batchv1.Job{}
+			wll := &kueue.Workload{}
+
+			ginkgo.By("checking the job starts")
+			gomega.Expect(k8sClient.Create(ctx, sampleJob)).Should(gomega.Succeed())
+
+			lookupKey := types.NamespacedName{Name: sampleJob.Name, Namespace: sampleJob.Namespace}
+			createdJob := &batchv1.Job{}
+			gomega.Expect(k8sClient.Get(ctx, lookupKey, createdJob)).Should(gomega.Succeed())
+
+			gomega.Eventually(func() *bool {
+				gomega.Expect(k8sClient.Get(ctx, lookupKey1, sampleJob)).Should(gomega.Succeed())
+				return sampleJob.Spec.Suspend
+			}, util.Timeout, util.Interval).Should(gomega.Equal(ptr.To(false)))
+
+			wlKey := types.NamespacedName{Name: workloadjob.GetWorkloadNameForJob(sampleJob.Name), Namespace: sampleJob.Namespace}
+
+			gomega.Eventually(func() bool {
+				if err := k8sClient.Get(ctx, wlKey, wll); err != nil {
+					return false
+				}
+				return workload.HasQuotaReservation(wll)
+			}, util.Timeout, util.Interval).Should(gomega.BeTrue())
+
+			ginkgo.By("Change the QueueingPolicy, suspend job and check the job remains suspended and the workload evicted")
+			// Changing QueuingPolicy to Never
+			wll.Spec.QueueingPolicy = kueue.QueueingPolicyTypeNever
+			gomega.Expect(k8sClient.Update(ctx, wll)).Should(gomega.Succeed())
+
+			// Suspending the job
+			gomega.Expect(k8sClient.Get(ctx, lookupKey, createdJob)).Should(gomega.Succeed())
+			createdJob.Spec.Suspend = ptr.To(true)
+			gomega.Expect(k8sClient.Update(ctx, createdJob)).Should(gomega.Succeed())
+
+			// Checking job stays suspended
+			ginkgo.By("checking job stays suspended")
+			gomega.Eventually(func() *bool {
+				gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sampleJob.Name, Namespace: sampleJob.Namespace}, createdJob)).
+					Should(gomega.Succeed())
+				return createdJob.Spec.Suspend
+			}, util.Timeout, util.Interval).Should(gomega.Equal(ptr.To(true)))
+
+			// Workload should get unadmitted
+			gomega.Expect(k8sClient.Get(ctx, wlKey, wll)).Should(gomega.Succeed())
+			util.ExpectWorkloadsToBePending(ctx, k8sClient, wll)
+
+			// Workload should stay pending
+			gomega.Consistently(func() bool {
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(wll), wll); err != nil {
+					return false
+				}
+				return workload.HasQuotaReservation(wll)
+			}, util.ConsistentDuration, util.Interval).Should(gomega.BeFalse())
+
+			util.FinishEvictionForWorkloads(ctx, k8sClient, wll)
+
+			ginkgo.By("checking the jobs becomes unsuspended after we update the QueueingPolicy back to Always")
+			gomega.Eventually(func() kueue.QueueingPolicyType {
+				gomega.Expect(k8sClient.Get(ctx, wlKey, wll)).Should(gomega.Succeed())
+				wll.Spec.QueueingPolicy = kueue.QueueingPolicyTypeAlways
+				gomega.Expect(k8sClient.Update(ctx, wll)).Should(gomega.Succeed())
+				return wll.Spec.QueueingPolicy
+			}, util.Timeout, util.Interval).Should(gomega.Equal(kueue.QueueingPolicyTypeAlways))
+
+			gomega.Eventually(func() *bool {
+				gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sampleJob.Name, Namespace: sampleJob.Namespace}, createdJob)).
+					Should(gomega.Succeed())
+				return createdJob.Spec.Suspend
+			}, util.Timeout, util.Interval).Should(gomega.Equal(ptr.To(false)))
+
+		})
+	})
+
 	ginkgo.When("Creating a Job In a Twostepadmission Queue", func() {
 		var (
 			onDemandRF   *kueue.ResourceFlavor
