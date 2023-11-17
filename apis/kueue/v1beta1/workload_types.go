@@ -279,10 +279,6 @@ const (
 	// WorkloadEvictedByAdmissionCheck indicates that the workload was evicted
 	// beacuse at least one admission check transitioned to False.
 	WorkloadEvictedByAdmissionCheck = "AdmissionCheck"
-
-	// WorkloadEvictedByQueueingPolicy indicates that the workload was evicted
-	// because QueueingPolicy was set to Never.
-	WorkloadEvictedByQueueingPolicy = "QueueingPolicyNever"
 )
 
 // +genclient

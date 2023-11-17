@@ -297,9 +297,10 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		if workload.HasQuotaReservation(wl) {
 			if !job.IsActive() {
 				log.V(6).Info("The job is no longer active, clear the workloads admission")
-				workload.UnsetQuotaReservationWithCondition(wl, "Pending", evCond.Message)
-				_ = workload.SyncAdmittedCondition(wl)
-				err := workload.ApplyAdmissionStatus(ctx, r.client, wl, true)
+				//workload.UnsetQuotaReservationWithCondition(wl, "Pending", evCond.Message)
+				//_ = workload.SyncAdmittedCondition(wl)
+				//err := workload.ApplyAdmissionStatus(ctx, r.client, wl, true)
+				err := UnsetQuotaReservation(wl, "Pending", evCond.Message, ctx, r)
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("clearing admission: %w", err)
 				}
@@ -313,10 +314,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		// start the job if the workload has been admitted, and the job is still suspended
 		if workload.IsAdmitted(wl) {
 			if workload.IsQueueingPolicyNever(wl) {
-				workload.UnsetQuotaReservationWithCondition(wl, "Pending", "QueueingPolicy is Never")
-				_ = workload.SyncAdmittedCondition(wl)
-				workload.SetEvictedCondition(wl, kueue.WorkloadEvictedByQueueingPolicy, "QueueingPolicy is set to Never")
-				err := workload.ApplyAdmissionStatus(ctx, r.client, wl, true)
+				err := UnsetQuotaReservation(wl, "Pending", "QueueingPolicy is Never", ctx, r)
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("applying admission status: %w", err)
 				}
@@ -799,4 +797,11 @@ func resetMinCounts(in []kueue.PodSet) []kueue.PodSet {
 		in[i].MinCount = nil
 	}
 	return in
+}
+
+func UnsetQuotaReservation(wl *kueue.Workload, reason, message string, ctx context.Context, r *JobReconciler) error {
+	workload.UnsetQuotaReservationWithCondition(wl, reason, message)
+	_ = workload.SyncAdmittedCondition(wl)
+	err := workload.ApplyAdmissionStatus(ctx, r.client, wl, true)
+	return err
 }

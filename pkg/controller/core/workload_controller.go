@@ -376,6 +376,7 @@ func (r *WorkloadReconciler) Update(e event.UpdateEvent) bool {
 	status := workloadStatus(wl)
 	log := r.log.WithValues("workload", klog.KObj(wl), "queue", wl.Spec.QueueName, "status", status)
 	ctx := ctrl.LoggerInto(context.Background(), log)
+	queueing := true
 
 	prevQueue := oldWl.Spec.QueueName
 	if prevQueue != wl.Spec.QueueName {
@@ -397,8 +398,14 @@ func (r *WorkloadReconciler) Update(e event.UpdateEvent) bool {
 	// We do not handle old workload here as it will be deleted or replaced by new one anyway.
 	workload.AdjustResources(ctrl.LoggerInto(ctx, log), r.client, wlCopy)
 
+	// the workload cannot be nominated for admission if queuingPolicy is set to Never
+	if workload.IsQueueingPolicyNever(wl) {
+		log.Info("[VICENTE] Workload skipped from admission because its QueueingPolicy is set to Never", "workload", klog.KObj(wl))
+		queueing = false
+	}
+
 	switch {
-	case status == finished:
+	case status == finished || (status == pending && !queueing):
 		// The workload could have been in the queues if we missed an event.
 		r.queues.DeleteWorkload(wl)
 
