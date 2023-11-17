@@ -400,12 +400,14 @@ func (r *WorkloadReconciler) Update(e event.UpdateEvent) bool {
 
 	// the workload cannot be nominated for admission if queuingPolicy is set to Never
 	if workload.IsQueueingPolicyNever(wl) {
-		log.Info("[VICENTE] Workload skipped from admission because its QueueingPolicy is set to Never", "workload", klog.KObj(wl))
 		queueing = false
 	}
 
 	switch {
 	case status == finished || (status == pending && !queueing):
+		if !queueing {
+			log.Info("Workload will not be admitted because its QueueingPolicy is set to Never and the job was suspended", "workload", klog.KObj(wl))
+		}
 		// The workload could have been in the queues if we missed an event.
 		r.queues.DeleteWorkload(wl)
 
