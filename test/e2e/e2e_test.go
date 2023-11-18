@@ -107,7 +107,7 @@ var _ = ginkgo.Describe("Kueue", func() {
 			spotRF = testing.MakeResourceFlavor("spot").
 				Label("instance-type", "spot").Obj()
 			gomega.Expect(k8sClient.Create(ctx, spotRF)).Should(gomega.Succeed())
-			clusterQueue = testing.MakeClusterQueue("cluster-queue").
+			clusterQueue = testing.MakeClusterQueue("cluster-queue").QueueingStrategy("StrictFIFO").
 				ResourceGroup(
 					*testing.MakeFlavorQuotas("on-demand").
 						Resource(corev1.ResourceCPU, "1").
@@ -336,6 +336,20 @@ var _ = ginkgo.Describe("Kueue", func() {
 			createdJob.Spec.Suspend = ptr.To(true)
 			gomega.Expect(k8sClient.Update(ctx, createdJob)).Should(gomega.Succeed())
 
+			ginkgo.By("checking a second job starts after first job is suspended")
+			sampleJob2 = (&testingjob.JobWrapper{Job: *sampleJob2}).Image("gcr.io/k8s-staging-perf-tests/sleep:v0.0.3", []string{"1s"}).Obj()
+			wll2 := &kueue.Workload{}
+
+			gomega.Expect(k8sClient.Create(ctx, sampleJob2)).Should(gomega.Succeed())
+			wlKey2 := types.NamespacedName{Name: workloadjob.GetWorkloadNameForJob(sampleJob2.Name), Namespace: sampleJob2.Namespace}
+
+			gomega.Eventually(func(g gomega.Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobKey2, sampleJob2)).Should(gomega.Succeed())
+				g.Expect(sampleJob2.Spec.Suspend).To(gomega.Equal(ptr.To(false)))
+				g.Expect(k8sClient.Get(ctx, wlKey2, wll2)).Should(gomega.Succeed())
+				util.ExpectWorkloadsToBeAdmitted(ctx, k8sClient, wll2)
+			}, util.Timeout, util.Interval).Should(gomega.Succeed())
+
 			// Checking job stays suspended
 			ginkgo.By("checking job stays suspended")
 			gomega.Eventually(func() *bool {
@@ -350,20 +364,6 @@ var _ = ginkgo.Describe("Kueue", func() {
 					Should(gomega.Succeed())
 				return createdJob.Spec.Suspend
 			}, util.ConsistentDuration, util.Interval).Should(gomega.Equal(ptr.To(true)))
-
-			ginkgo.By("checking a second job starts after first job is suspended")
-			sampleJob2 = (&testingjob.JobWrapper{Job: *sampleJob2}).Image("gcr.io/k8s-staging-perf-tests/sleep:v0.0.3", []string{"1s"}).Obj()
-			wll2 := &kueue.Workload{}
-
-			gomega.Expect(k8sClient.Create(ctx, sampleJob2)).Should(gomega.Succeed())
-			wlKey2 := types.NamespacedName{Name: workloadjob.GetWorkloadNameForJob(sampleJob2.Name), Namespace: sampleJob2.Namespace}
-
-			gomega.Eventually(func(g gomega.Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobKey2, sampleJob2)).Should(gomega.Succeed())
-				g.Expect(sampleJob2.Spec.Suspend).To(gomega.Equal(ptr.To(false)))
-				g.Expect(k8sClient.Get(ctx, wlKey2, wll2)).Should(gomega.Succeed())
-				util.ExpectWorkloadsToBeAdmitted(ctx, k8sClient, wll2)
-			}, util.Timeout, util.Interval).Should(gomega.Succeed())
 
 			ginkgo.By("checking the first workload gets unadmitted")
 			// Workload should get unadmitted
