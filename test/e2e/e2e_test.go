@@ -331,11 +331,6 @@ var _ = ginkgo.Describe("Kueue", func() {
 			wll.Spec.QueueingPolicy = kueue.QueueingPolicyTypeNever
 			gomega.Expect(k8sClient.Update(ctx, wll)).Should(gomega.Succeed())
 
-			// Suspending the job
-			gomega.Expect(k8sClient.Get(ctx, lookupKey1, createdJob)).Should(gomega.Succeed())
-			createdJob.Spec.Suspend = ptr.To(true)
-			gomega.Expect(k8sClient.Update(ctx, createdJob)).Should(gomega.Succeed())
-
 			ginkgo.By("checking a second job starts after first job is suspended")
 			sampleJob2 = (&testingjob.JobWrapper{Job: *sampleJob2}).Image("gcr.io/k8s-staging-perf-tests/sleep:v0.0.3", []string{"1s"}).Obj()
 			wll2 := &kueue.Workload{}

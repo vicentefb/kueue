@@ -452,7 +452,6 @@ func TestReconciler(t *testing.T) {
 		},
 		"when workload is not admitted due to QueueingPolicy and job is suspended": {
 			job: *baseJobWrapper.Clone().
-				Suspend(true).
 				Obj(),
 			wantJob: *baseJobWrapper.Clone().
 				Suspend(true).

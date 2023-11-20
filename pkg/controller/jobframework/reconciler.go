@@ -297,10 +297,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		if workload.HasQuotaReservation(wl) {
 			if !job.IsActive() {
 				log.V(6).Info("The job is no longer active, clear the workloads admission")
-				//workload.UnsetQuotaReservationWithCondition(wl, "Pending", evCond.Message)
-				//_ = workload.SyncAdmittedCondition(wl)
-				//err := workload.ApplyAdmissionStatus(ctx, r.client, wl, true)
-				err := UnsetQuotaReservation(wl, "Pending", evCond.Message, ctx, r)
+				err := UnsetQuotaReservation(wl, "Pending", evCond.Message, ctx, r, true)
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("clearing admission: %w", err)
 				}
@@ -314,7 +311,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		// start the job if the workload has been admitted, and the job is still suspended
 		if workload.IsAdmitted(wl) {
 			if workload.IsQueueingPolicyNever(wl) {
-				err := UnsetQuotaReservation(wl, "Pending", "QueueingPolicy is Never", ctx, r)
+				err := UnsetQuotaReservation(wl, "Pending", "QueueingPolicy is Never", ctx, r, true)
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("applying admission status: %w", err)
 				}
@@ -353,7 +350,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 	}
 
 	// 8. handle job is unsuspended.
-	if !workload.IsAdmitted(wl) {
+	if !workload.IsAdmitted(wl) || workload.IsQueueingPolicyNever(wl) {
 		// the job must be suspended if the workload is not yet admitted.
 		log.V(2).Info("Running job is not admitted by a cluster queue, suspending")
 		err := r.stopJob(ctx, job, object, wl, "Not admitted by cluster queue")
@@ -799,9 +796,9 @@ func resetMinCounts(in []kueue.PodSet) []kueue.PodSet {
 	return in
 }
 
-func UnsetQuotaReservation(wl *kueue.Workload, reason, message string, ctx context.Context, r *JobReconciler) error {
+func UnsetQuotaReservation(wl *kueue.Workload, reason, message string, ctx context.Context, r *JobReconciler, strict bool) error {
 	workload.UnsetQuotaReservationWithCondition(wl, reason, message)
 	_ = workload.SyncAdmittedCondition(wl)
-	err := workload.ApplyAdmissionStatus(ctx, r.client, wl, true)
+	err := workload.ApplyAdmissionStatus(ctx, r.client, wl, strict)
 	return err
 }
