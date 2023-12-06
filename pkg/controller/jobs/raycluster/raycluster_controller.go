@@ -78,7 +78,7 @@ func (j *RayCluster) IsActive() bool {
 }
 
 func (j *RayCluster) Suspend() {
-	//*j.Spec.WorkerGroupSpecs[0].Replicas = 0
+	*j.Spec.WorkerGroupSpecs[0].Replicas = 0
 }
 
 func (j *RayCluster) GVK() schema.GroupVersionKind {
@@ -117,8 +117,6 @@ func (j *RayCluster) RunWithPodSetsInfo(podSetsInfo []podset.PodSetInfo) error {
 	if len(podSetsInfo) != expectedLen {
 		return podset.BadPodSetsInfoLenError(expectedLen, len(podSetsInfo))
 	}
-
-	//j.Spec.Suspend = false
 
 	// head
 	headPod := &j.Spec.HeadGroupSpec.Template

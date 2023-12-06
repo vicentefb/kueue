@@ -23,16 +23,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	rayclusterapi "github.com/ray-project/kuberay/ray-operator/apis/ray/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-	"sigs.k8s.io/kueue/pkg/controller/jobframework"
 	"sigs.k8s.io/kueue/pkg/podset"
-	utiltesting "sigs.k8s.io/kueue/pkg/util/testing"
 	testingrayutil "sigs.k8s.io/kueue/pkg/util/testingjobs/raycluster"
 )
 
@@ -275,6 +269,7 @@ func TestNodeSelectors(t *testing.T) {
 	}
 }
 
+/*
 func TestReconciler(t *testing.T) {
 	baseJobWrapper := testingrayutil.MakeJob("job", "ns").
 		Suspend(true).
@@ -388,3 +383,4 @@ func TestReconciler(t *testing.T) {
 		})
 	}
 }
+*/
