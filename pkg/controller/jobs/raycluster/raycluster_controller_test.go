@@ -23,10 +23,15 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	rayclusterapi "github.com/ray-project/kuberay/ray-operator/apis/ray/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
-
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	"sigs.k8s.io/kueue/pkg/controller/jobframework"
 	"sigs.k8s.io/kueue/pkg/podset"
+	utiltesting "sigs.k8s.io/kueue/pkg/util/testing"
 	testingrayutil "sigs.k8s.io/kueue/pkg/util/testingjobs/raycluster"
 )
 
@@ -269,7 +274,6 @@ func TestNodeSelectors(t *testing.T) {
 	}
 }
 
-/*
 func TestReconciler(t *testing.T) {
 	baseJobWrapper := testingrayutil.MakeJob("job", "ns").
 		Suspend(true).
@@ -291,16 +295,23 @@ func TestReconciler(t *testing.T) {
 				Suspend(false).
 				Obj(),
 			workloads: []kueue.Workload{
-				*utiltesting.MakeWorkload("a", "ns").Finalizers(kueue.ResourceInUseFinalizerName).
-					PodSets(*utiltesting.MakePodSet(kueue.DefaultPodSetName, 10).Request(corev1.ResourceCPU, "1").Obj()).
-					ReserveQuota(utiltesting.MakeAdmission("cq").AssignmentPodCount(10).Obj()).
+				*utiltesting.MakeWorkload("test", "ns").Finalizers(kueue.ResourceInUseFinalizerName).
+					PodSets(*utiltesting.MakePodSet("head", 1).Obj(),
+						*utiltesting.MakePodSet("workers-group-0", 1).Obj()).
+					ReserveQuota(utiltesting.MakeAdmission("cq").AssignmentPodCount(1).Obj()).
 					Admitted(true).
 					AdmissionCheck(kueue.AdmissionCheckState{
 						Name:  "check",
 						State: kueue.CheckStateReady,
 						PodSetUpdates: []kueue.PodSetUpdate{
 							{
-								Name: "main",
+								Name: "head",
+								Labels: map[string]string{
+									"ac-key": "ac-value",
+								},
+							},
+							{
+								Name: "workers-group-0",
 								Labels: map[string]string{
 									"ac-key": "ac-value",
 								},
@@ -312,15 +323,22 @@ func TestReconciler(t *testing.T) {
 			wantWorkloads: []kueue.Workload{
 				*utiltesting.MakeWorkload("a", "ns").Finalizers(kueue.ResourceInUseFinalizerName).
 					Finalizers(kueue.ResourceInUseFinalizerName).
-					PodSets(*utiltesting.MakePodSet(kueue.DefaultPodSetName, 10).Request(corev1.ResourceCPU, "1").Obj()).
-					ReserveQuota(utiltesting.MakeAdmission("cq").AssignmentPodCount(10).Obj()).
+					PodSets(*utiltesting.MakePodSet("head", 1).Obj(),
+						*utiltesting.MakePodSet("workers-group-0", 1).Obj()).
+					ReserveQuota(utiltesting.MakeAdmission("cq").AssignmentPodCount(1).Obj()).
 					Admitted(true).
 					AdmissionCheck(kueue.AdmissionCheckState{
 						Name:  "check",
 						State: kueue.CheckStateReady,
 						PodSetUpdates: []kueue.PodSetUpdate{
 							{
-								Name: "main",
+								Name: "head",
+								Labels: map[string]string{
+									"ac-key": "ac-value",
+								},
+							},
+							{
+								Name: "workers-group-0",
 								Labels: map[string]string{
 									"ac-key": "ac-value",
 								},
@@ -334,7 +352,8 @@ func TestReconciler(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			ctx, _ := utiltesting.ContextWithLog(t)
-			clientBuilder := utiltesting.NewClientBuilder()
+			clientBuilder := utiltesting.NewClientBuilder(rayclusterapi.AddToScheme)
+
 			if err := SetupIndexes(ctx, utiltesting.AsIndexer(clientBuilder)); err != nil {
 				t.Fatalf("Could not setup indexes: %v", err)
 			}
@@ -383,4 +402,3 @@ func TestReconciler(t *testing.T) {
 		})
 	}
 }
-*/

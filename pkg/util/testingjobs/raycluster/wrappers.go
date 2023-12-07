@@ -44,7 +44,7 @@ func MakeJob(name, ns string) *JobWrapper {
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
-								Name: "head-container",
+								Name: "c",
 							},
 						},
 					},
@@ -61,7 +61,7 @@ func MakeJob(name, ns string) *JobWrapper {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name: "worker-container",
+									Name: "c",
 								},
 							},
 						},
@@ -80,6 +80,12 @@ func (j *JobWrapper) Obj() *rayclusterapi.RayCluster {
 // Suspend updates the suspend status of the job
 func (j *JobWrapper) Suspend(s bool) *JobWrapper {
 	//j.Spec.Suspend = s
+	return j
+}
+
+// Request adds a resource request to the default container.
+func (j *JobWrapper) Request(r corev1.ResourceName, v string) *JobWrapper {
+	j.Spec.HeadGroupSpec.Template.Spec.Containers[0].Resources.Requests[r] = resource.MustParse(v)
 	return j
 }
 
