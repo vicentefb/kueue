@@ -84,4 +84,8 @@ The resource needs of the workload can be configured in the `spec`.
 
 ## Example RayJob
 
+The RayCluster looks like the following:
+
+{{< include "examples/jobs/ray-cluster-sample.yaml" "yaml" >}}
+
 You can submit a Ray Job using the [CLI](https://docs.ray.io/en/latest/cluster/running-applications/job-submission/quickstart.html) or log into the Ray Head and execute a job following this [example](https://ray-project.github.io/kuberay/deploy/helm-cluster/#end-to-end-example) with kind cluster. 
