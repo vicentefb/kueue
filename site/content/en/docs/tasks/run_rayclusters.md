@@ -79,8 +79,12 @@ The resource needs of the workload can be configured in the `spec`.
             memory: 1G
 ```
 
+A RayCluster will hold resource quota and for optimal resource management, Kueue requires that the RayCluster created for a RayJob is deleted after the job completes
+
 ### c. Limitations
-- Because a Kueue workload can have a maximum of 8 PodSets, the maximum number of `spec.workerGroupSpecs` is 7.
+- Because a Kueue workload can have a maximum of 8 PodSets, the maximum number of `spec.workerGroupSpecs` is 7
+- You cannot submit a RayJob to Kueue that targets a pre-existing, independently created RayCluster
+- Kueue manages resource allocation for the RayCluster; therefore, the cluster's internal autoscaling mechanisms need to be disabled
 
 ## Example RayJob
 
