@@ -516,9 +516,13 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 			return nil, err
 		}
 	}
-
+	log.Info("[VICENTE] INSIDE ENSUREONEWORKLOAD")
+	log.Info("[VICENTE] JOB", "JOB:", job)
+	log.Info("[VICENTE] JOB IS SUSPENDED", "JOBISSUSPENDED()", job.IsSuspended())
+	log.Info("[VICENTE] MATCH", "MATCH:", match)
 	var toUpdate *kueue.Workload
 	if match == nil && len(toDelete) > 0 && job.IsSuspended() && !workload.HasQuotaReservation(toDelete[0]) {
+		log.Info("[VICENTE] TO UPDATE")
 		toUpdate = toDelete[0]
 		toDelete = toDelete[1:]
 	}
@@ -531,6 +535,7 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 			// The job may have been modified and hence the existing workload
 			// doesn't match the job anymore. All bets are off if there are more
 			// than one workload...
+			log.Info("[VICENTE] THE JOB WAS MODIFIED", "TODELETE:", toDelete)
 			w = toDelete[0]
 		}
 
@@ -541,6 +546,8 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 			} else {
 				msg = "No matching Workload; restoring pod templates according to existent Workload"
 			}
+			log.Info("[VICENTE] STOPPING THE JOB", "JOB:", job)
+			//log.Info(msg)
 			if err := r.stopJob(ctx, job, w, StopReasonNoMatchingWorkload, msg); err != nil {
 				return nil, fmt.Errorf("stopping job with no matching workload: %w", err)
 			}
@@ -569,6 +576,8 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 
 	if existedWls != 0 {
 		if match == nil {
+			log.Info("[VICENTE] UPDATING THE JOB", "JOB:", job)
+			//return r.updateWorkloadToMatchJob(ctx, job, object, toDelete[0])
 			return nil, fmt.Errorf("%w: deleted %d workloads", ErrNoMatchingWorkloads, len(toDelete))
 		}
 		return nil, fmt.Errorf("%w: deleted %d workloads", ErrExtraWorkloads, len(toDelete))
@@ -640,11 +649,14 @@ func (r *JobReconciler) ensurePrebuiltWorkloadInSync(ctx context.Context, wl *ku
 // expectedRunningPodSets gets the expected podsets during the job execution, returns nil if the workload has no reservation or
 // the admission does not match.
 func expectedRunningPodSets(ctx context.Context, c client.Client, wl *kueue.Workload) []kueue.PodSet {
+	log := ctrl.LoggerFrom(ctx)
 	if !workload.HasQuotaReservation(wl) {
+		log.Info("[VICENTE] WORKLOAD HAS NO QUOTA RESERVATION")
 		return nil
 	}
 	info, err := getPodSetsInfoFromStatus(ctx, c, wl)
 	if err != nil {
+		log.Info("[VICENTE] ERROR GETTIGN POD SETS INFO")
 		return nil
 	}
 	infoMap := slices.ToRefMap(info, func(psi *podset.PodSetInfo) string { return psi.Name })
@@ -678,35 +690,53 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 	}
 
 	jobPodSets := clearMinCountsIfFeatureDisabled(job.PodSets())
-
+	log := ctrl.LoggerFrom(ctx)
 	if runningPodSets := expectedRunningPodSets(ctx, c, wl); runningPodSets != nil {
+
+		log.Info("[VICENTE] THERE WAS NO ERROR IN RUNNINGPODSETS", wl.Spec)
 		if equality.ComparePodSetSlices(jobPodSets, runningPodSets) {
+			log.Info("[VICENTE] COMPARE POD SETS WAS TRUE", "JOBPODSETS", jobPodSets)
+			log.Info("[VICENTE] COMPARE POD SETS WAS TRUE", "RUNNINGPODSETS", runningPodSets)
 			return true
 		}
+		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "JOBPODSETS", jobPodSets)
+		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "RUNNINGPODSETS", runningPodSets)
+		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "WL", wl.Spec)
 		// If the workload is admitted but the job is suspended, do the check
 		// against the non-running info.
 		// This might allow some violating jobs to pass equivalency checks, but their
 		// workloads would be invalidated in the next sync after unsuspending.
 		return job.IsSuspended() && equality.ComparePodSetSlices(jobPodSets, wl.Spec.PodSets)
 	}
-
+	log.Info("[VICENTE] RUNNING POD SETS WAS FALSE", "wl.spec: ", wl.Spec)
 	return equality.ComparePodSetSlices(jobPodSets, wl.Spec.PodSets)
 }
 
 func (r *JobReconciler) updateWorkloadToMatchJob(ctx context.Context, job GenericJob, object client.Object, wl *kueue.Workload) (*kueue.Workload, error) {
 	newWl, err := r.constructWorkload(ctx, job, object)
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("[VICENTE] CONSTRUCTED A WORKLOAD", "ERROR:", err)
+	log.Info("[VICENTE] CONSTRUCTED A WORKLOAD", "NEWL:", newWl)
 	if err != nil {
 		return nil, fmt.Errorf("can't construct workload for update: %w", err)
 	}
 	err = r.prepareWorkload(ctx, job, newWl)
+
 	if err != nil {
 		return nil, fmt.Errorf("can't construct workload for update: %w", err)
 	}
+	log.Info("[VICENTE] PREPARED WORKLOAD", "ERROR:", err)
+	log.Info("[VICENTE] PREPARED WORKLOAD NEWL", "NEWL:", newWl)
+	log.Info("[VICENTE] PREPARED WORKLOAD NEWSPEC", "NEWL:", newWl.Spec)
+	log.Info("[VICENTE] PREPARED WORKLOAD ORIGINAL WL", "WL:", wl)
+	log.Info("[VICENTE] PREPARED WORKLOAD ORIGINAL WL SPEC", "WL:", wl.Spec)
 	wl.Spec = newWl.Spec
+	log.Info("[VICENTE] UPDATED PREPARED WORKLOAD ORIGINAL WL SPEC", "WL:", wl.Spec)
 	if err = r.client.Update(ctx, wl); err != nil {
 		return nil, fmt.Errorf("updating existed workload: %w", err)
 	}
 
+	log.Info("[VICENTE] UPDATED WORKLOAD SPEC")
 	r.record.Eventf(object, corev1.EventTypeNormal, ReasonUpdatedWorkload,
 		"Updated not matching Workload for suspended job: %v", klog.KObj(wl))
 	return newWl, nil
