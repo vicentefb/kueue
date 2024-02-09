@@ -691,6 +691,9 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 
 	jobPodSets := clearMinCountsIfFeatureDisabled(job.PodSets())
 	log := ctrl.LoggerFrom(ctx)
+	if features.Enabled(features.DynamicallySizedJobs) {
+		return true
+	}
 	if runningPodSets := expectedRunningPodSets(ctx, c, wl); runningPodSets != nil {
 
 		log.Info("[VICENTE] THERE WAS NO ERROR IN RUNNINGPODSETS", wl.Spec)

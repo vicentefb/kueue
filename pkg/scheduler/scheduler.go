@@ -313,8 +313,23 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 		ns := corev1.Namespace{}
 		e := entry{Info: w}
 		if s.cache.IsAssumedOrAdmittedWorkload(w) {
-			log.Info("Workload skipped from admission because it's already assumed or admitted", "workload", klog.KObj(w.Obj))
-			continue
+			//log.Info("Workload skipped from admission because it's already assumed or admitted", "workload", klog.KObj(w.Obj))
+			//continue
+			if features.Enabled(features.DynamicallySizedJobs) {
+				// calculate the diff and add new entry for it.
+				e.assignment, e.preemptionTargets = s.getResizeAssignment(log, &e.Info, &snap)
+				e.inadmissibleMsg = e.assignment.Message()
+				e.Info.LastAssignment = &e.assignment.LastState
+			} else {
+				log.Info("Workload skipped from admission because it's already assumed or admitted", "workload", klog.KObj(w.Obj))
+				continue
+			}
+			// here update such that an already admitted workload still need to be evaluated
+			// against the desired workload and what is in podset assignment
+
+			// diffEntry := entry{Info: w}
+
+			// calculate diff of assignment based on spec and status?
 		} else if workload.HasRetryOrRejectedChecks(w.Obj) {
 			e.inadmissibleMsg = "The workload has failed admission checks"
 		} else if snap.InactiveClusterQueueSets.Has(w.ClusterQueue) {
@@ -377,10 +392,36 @@ type partialAssignment struct {
 	preemptionTargets []*workload.Info
 }
 
+type resizeAssignment struct {
+	assignment flavorassigner.Assignment
+}
+
+func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
+	cq := snap.ClusterQueues[wl.ClusterQueue]
+	resizeAssignment := flavorassigner.AssignFlavors(log, wl, snap.ResourceFlavors, cq, nil, true)
+	var resizeAssignmentTargets []*workload.Info
+
+	arm := resizeAssignment.RepresentativeMode()
+	if arm == flavorassigner.Fit {
+		return resizeAssignment, nil
+	}
+
+	if arm == flavorassigner.Preempt {
+		resizeAssignmentTargets = s.preemptor.GetTargets(*wl, resizeAssignment, snap)
+	}
+
+	// if the feature gate is not enabled or we can preempt
+	if !features.Enabled(features.PartialAdmission) || len(resizeAssignmentTargets) > 0 {
+		return resizeAssignment, resizeAssignmentTargets
+	}
+
+	return resizeAssignment, nil
+}
+
 func (s *Scheduler) getAssignments(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
 	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
-	fullAssignment := flvAssigner.Assign(log, nil)
+	fullAssignment := flvAssigner.Assign(log, nil, false)
 	var faPreemtionTargets []*workload.Info
 
 	arm := fullAssignment.RepresentativeMode()
@@ -399,7 +440,7 @@ func (s *Scheduler) getAssignments(log logr.Logger, wl *workload.Info, snap *cac
 
 	if wl.CanBePartiallyAdmitted() {
 		reducer := flavorassigner.NewPodSetReducer(wl.Obj.Spec.PodSets, func(nextCounts []int32) (*partialAssignment, bool) {
-			assignment := flvAssigner.Assign(log, nextCounts)
+			assignment := flvAssigner.Assign(log, nextCounts, false)
 			if assignment.RepresentativeMode() == flavorassigner.Fit {
 				return &partialAssignment{assignment: assignment}, true
 			}
