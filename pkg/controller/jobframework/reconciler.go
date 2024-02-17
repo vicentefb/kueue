@@ -348,6 +348,70 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		}
 	}
 
+	// 4.1 update podSetCount if implemented by the job
+
+	if features.Enabled(features.DynamicallySizedJobs) && wl != nil && workload.IsAdmitted(wl) {
+		a := job.PodSets()
+		workloadCount := int32(0)
+		if len(a) > 1 {
+			workloadCount = a[1].Count
+			log.Info("[VICENTE] WORKLOADCOUNT BEFORE", "WORKLOADCOUNT", workloadCount)
+		}
+
+		if jobRecl, implementsReclaimable := job.(JobWithResizePods); implementsReclaimable {
+			log.Info("[VICENTE] RAYCLULSTER IMPLEMENTS")
+			replicas := jobRecl.ResizePods()
+			log.Info("[VICENTE] REPLICAS", "REPLICAS", replicas)
+			log.Info("[VICENTE] ADMISSION PODSET ASSIGNMENTS", "COUNT", wl.Status.Admission.PodSetAssignments[1].Count)
+			if len(wl.Status.Admission.PodSetAssignments) > 1 && *wl.Status.Admission.PodSetAssignments[1].Count != workloadCount {
+				log.Info("[VICENTE] REPLICAS AND WORKLOAD COUNT IS NOT THE SAME")
+				log.Info("[VICENTE] REPLICAS", "REPLICAS", replicas)
+				log.Info("[VICENTE] WORKLOADCOUNT", "WORKLOADCOUNT", workloadCount)
+
+				//podSets := job.PodSets()
+				//wl.Spec.PodSets = podSets
+				//r.client.Status().Patch(ctx, wl, client.Apply, client.FieldOwner(constants.ReclaimablePodsMgr))
+				err := workload.UpdatePodSetCount(ctx, r.client, wl, a)
+				if err != nil {
+					log.Error(err, "Updating reclaimable pods")
+					return ctrl.Result{}, err
+				}
+				log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED", wl.Spec.PodSets)
+				return ctrl.Result{}, nil
+
+				/*
+					if job.Spec.SchedulingGates == nil {
+						job.Spec.SchedulingGates = make([]corev1.PodSchedulingGate, 0)
+					}
+					job.Spec.SchedulingGates = append(p.Spec.SchedulingGates, corev1.PodSchedulingGate{Name: "kueue.x-k8s.io/admission"})
+
+					err := workload.UpdatePodSetCount(ctx, r.client, wl, int(workloadCount))
+					if err != nil {
+						log.Error(err, "Updating reclaimable pods")
+						return ctrl.Result{}, err
+					}
+					// Create the corresponding workload.
+					wl, err := r.constructWorkload(ctx, job, object)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					log.Info("[VICENTE] WORKLAOD CREWATED", "WORKLOADCOUNT", wl)
+					err = r.prepareWorkload(ctx, job, wl)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					log.Info("[VICENTE] WORKLAOD IS PREPRARED", "WORKLOADCOUNT", wl)
+					if err = r.client.Update(ctx, wl); err != nil {
+						return ctrl.Result{}, err
+					}
+					r.record.Eventf(object, corev1.EventTypeNormal, ReasonCreatedWorkload,
+						"Created Workload: %v", workload.Key(wl))
+					log.Info("[VICENTE] WORKLAOD WAS CREATED", "WORKLOADCOUNT", wl)
+					return ctrl.Result{}, nil */
+			}
+		}
+	}
+
 	// 5. handle WaitForPodsReady only for a standalone job.
 	// handle a job when waitForPodsReady is enabled, and it is the main job
 	if r.waitForPodsReady {
@@ -834,7 +898,7 @@ func (r *JobReconciler) constructWorkload(ctx context.Context, job GenericJob, o
 	}
 
 	podSets := job.PodSets()
-
+	log.Info("[VICENTE] INSIDE CONSTRUCT WORKLOAD", "PODSETS", podSets)
 	wl := &kueue.Workload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       GetWorkloadNameForOwnerWithGVK(object.GetName(), object.GetUID(), job.GVK()),

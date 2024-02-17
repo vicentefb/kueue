@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -486,6 +487,17 @@ func UpdateReclaimablePods(ctx context.Context, c client.Client, w *kueue.Worklo
 	patch := BaseSSAWorkload(w)
 	patch.Status.ReclaimablePods = reclaimablePods
 	return c.Status().Patch(ctx, patch, client.Apply, client.FieldOwner(constants.ReclaimablePodsMgr))
+}
+
+// UpdateReclaimablePods updates the ReclaimablePods list for the workload wit SSA.
+func UpdatePodSetCount(ctx context.Context, c client.Client, w *kueue.Workload, newPodSet []kueue.PodSet) error {
+	log := ctrl.LoggerFrom(ctx)
+	patch := BaseSSAWorkload(w)
+	log.Info("[VICENTE] PATCHHHH", "PATCHHH SPEC", patch.Spec)
+	log.Info("[VICENTE] PATCHHHH", "PATCHHH", w)
+	patch.Spec.PodSets = newPodSet
+	log.Info("[VICENTE] PATCHHHH", "PATCHHH SPEC AGAAIN", patch.Spec)
+	return c.Patch(ctx, w, client.Apply, client.FieldOwner(constants.WorkloadControllerName))
 }
 
 // ReclaimablePodsAreEqual checks if two Reclaimable pods are semantically equal

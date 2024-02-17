@@ -62,6 +62,11 @@ type JobWithReclaimablePods interface {
 	ReclaimablePods() ([]kueue.ReclaimablePod, error)
 }
 
+type JobWithResizePods interface {
+	// ReclaimablePods returns the list of reclaimable pods.
+	ResizePods() int
+}
+
 type StopReason int
 
 const (

@@ -308,6 +308,7 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 	log := ctrl.LoggerFrom(ctx)
 	entries := make([]entry, 0, len(workloads))
 	for _, w := range workloads {
+		log.Info("[VICENTE] ENTER FOR LOOP", "RESIZE", w)
 		log := log.WithValues("workload", klog.KObj(w.Obj), "clusterQueue", klog.KRef("", w.ClusterQueue))
 		cq := snap.ClusterQueues[w.ClusterQueue]
 		ns := corev1.Namespace{}
@@ -320,6 +321,9 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 				e.assignment, e.preemptionTargets = s.getResizeAssignment(log, &e.Info, &snap)
 				e.inadmissibleMsg = e.assignment.Message()
 				e.Info.LastAssignment = &e.assignment.LastState
+
+				log.Info("[VICENTE] ADDING ENTRY FOR RESIZE", "RESIZE", e)
+				log.Info("[VICENTE] WORKLOAD", "W", w)
 			} else {
 				log.Info("Workload skipped from admission because it's already assumed or admitted", "workload", klog.KObj(w.Obj))
 				continue
@@ -352,6 +356,7 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 		}
 		entries = append(entries, e)
 	}
+	log.Info("[VICENTE] WORKLOAD ISNT ASSUMED", "ENTRIES", entries)
 	return entries
 }
 
