@@ -497,7 +497,7 @@ func UpdatePodSetCount(ctx context.Context, c client.Client, w *kueue.Workload, 
 	log.Info("[VICENTE] PATCHHHH", "PATCHHH", w)
 	patch.Spec.PodSets = newPodSet
 	log.Info("[VICENTE] PATCHHHH", "PATCHHH SPEC AGAAIN", patch.Spec)
-	return c.Patch(ctx, w, client.Apply, client.FieldOwner(constants.WorkloadControllerName))
+	return c.Status().Patch(ctx, patch, client.Apply, client.FieldOwner(constants.ScaleDown))
 }
 
 // ReclaimablePodsAreEqual checks if two Reclaimable pods are semantically equal

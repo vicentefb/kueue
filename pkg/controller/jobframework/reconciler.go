@@ -368,15 +368,24 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 				log.Info("[VICENTE] REPLICAS", "REPLICAS", replicas)
 				log.Info("[VICENTE] WORKLOADCOUNT", "WORKLOADCOUNT", workloadCount)
 
-				//podSets := job.PodSets()
+				podSets := job.PodSets()
 				//wl.Spec.PodSets = podSets
 				//r.client.Status().Patch(ctx, wl, client.Apply, client.FieldOwner(constants.ReclaimablePodsMgr))
-				err := workload.UpdatePodSetCount(ctx, r.client, wl, a)
+				//var toUpdate *kueue.Workload
+				//toUpdate = wl
+				err = workload.UpdatePodSetCount(ctx, r.client, wl, podSets)
+				//a, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate)
 				if err != nil {
-					log.Error(err, "Updating reclaimable pods")
+					log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED WITH ERRROR ", err)
 					return ctrl.Result{}, err
 				}
-				log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED", wl.Spec.PodSets)
+
+				//err := workload.UpdatePodSetCount(ctx, r.client, wl, a)
+				//if err != nil {
+				//	log.Error(err, "Updating reclaimable pods")
+				//	return ctrl.Result{}, err
+				//}
+				log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED", a)
 				return ctrl.Result{}, nil
 
 				/*
@@ -756,6 +765,7 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 	jobPodSets := clearMinCountsIfFeatureDisabled(job.PodSets())
 	log := ctrl.LoggerFrom(ctx)
 	if features.Enabled(features.DynamicallySizedJobs) {
+		log.Info("[VICENTE] DYNAMIC JOBS IS ENABLED", wl.Spec)
 		return true
 	}
 	if runningPodSets := expectedRunningPodSets(ctx, c, wl); runningPodSets != nil {

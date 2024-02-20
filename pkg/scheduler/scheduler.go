@@ -403,8 +403,9 @@ type resizeAssignment struct {
 
 func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
-	resizeAssignment := flavorassigner.AssignFlavors(log, wl, snap.ResourceFlavors, cq, nil, true)
-	var resizeAssignmentTargets []*workload.Info
+	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
+	resizeAssignment := flvAssigner.Assign(log, nil, false)
+	var faPreemtionTargets []*workload.Info
 
 	arm := resizeAssignment.RepresentativeMode()
 	if arm == flavorassigner.Fit {
@@ -412,12 +413,12 @@ func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap
 	}
 
 	if arm == flavorassigner.Preempt {
-		resizeAssignmentTargets = s.preemptor.GetTargets(*wl, resizeAssignment, snap)
+		faPreemtionTargets = s.preemptor.GetTargets(*wl, resizeAssignment, snap)
 	}
 
 	// if the feature gate is not enabled or we can preempt
-	if !features.Enabled(features.PartialAdmission) || len(resizeAssignmentTargets) > 0 {
-		return resizeAssignment, resizeAssignmentTargets
+	if !features.Enabled(features.PartialAdmission) || len(faPreemtionTargets) > 0 {
+		return resizeAssignment, faPreemtionTargets
 	}
 
 	return resizeAssignment, nil
