@@ -65,8 +65,6 @@ var NewReconciler = jobframework.NewGenericReconcilerFactory(func() jobframework
 
 type RayCluster rayv1.RayCluster
 
-var _ jobframework.JobWithResizePods = (*RayCluster)(nil)
-
 var _ jobframework.GenericJob = (*RayCluster)(nil)
 
 func (j *RayCluster) Object() client.Object {
@@ -87,10 +85,6 @@ func (j *RayCluster) Suspend() {
 
 func (j *RayCluster) GVK() schema.GroupVersionKind {
 	return gvk
-}
-
-func (j *RayCluster) ResizePods() int {
-	return int(*j.Spec.WorkerGroupSpecs[0].Replicas)
 }
 
 func (j *RayCluster) PodSets() []kueue.PodSet {
