@@ -351,74 +351,28 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 	// 4.1 update podSetCount if implemented by the job
 
 	if features.Enabled(features.DynamicallySizedJobs) && wl != nil && workload.IsAdmitted(wl) {
-		a := job.PodSets()
-		workloadCount := int32(0)
-		if len(a) > 1 {
-			workloadCount = a[1].Count
-			log.Info("[VICENTE] WORKLOADCOUNT BEFORE", "WORKLOADCOUNT", workloadCount)
-		}
+		podSets := job.PodSets()
+		jobPodSetCount := int32(0)
+		if len(podSets) > 1 {
+			jobPodSetCount = podSets[1].Count
+			log.Info("[VICENTE] JOB POD SET COUNT BEFORE", "JOB POD SET COUNT VARIABLE", jobPodSetCount)
 
-		if jobRecl, implementsReclaimable := job.(JobWithResizePods); implementsReclaimable {
-			log.Info("[VICENTE] RAYCLULSTER IMPLEMENTS")
-			replicas := jobRecl.ResizePods()
-			log.Info("[VICENTE] REPLICAS", "REPLICAS", replicas)
 			log.Info("[VICENTE] ADMISSION PODSET ASSIGNMENTS", "COUNT", wl.Status.Admission.PodSetAssignments[1].Count)
-			if len(wl.Status.Admission.PodSetAssignments) > 1 && *wl.Status.Admission.PodSetAssignments[1].Count != workloadCount {
+			log.Info("[VICENTE] POD SETS COUNT", "COUNT", wl.Spec.PodSets[1].Count)
+			if len(wl.Status.Admission.PodSetAssignments) > 1 && wl.Spec.PodSets[1].Count != jobPodSetCount {
 				log.Info("[VICENTE] REPLICAS AND WORKLOAD COUNT IS NOT THE SAME")
-				log.Info("[VICENTE] REPLICAS", "REPLICAS", replicas)
-				log.Info("[VICENTE] WORKLOADCOUNT", "WORKLOADCOUNT", workloadCount)
-
-				podSets := job.PodSets()
-				//wl.Spec.PodSets = podSets
-				//r.client.Status().Patch(ctx, wl, client.Apply, client.FieldOwner(constants.ReclaimablePodsMgr))
-				//var toUpdate *kueue.Workload
-				//toUpdate = wl
-				err = workload.UpdatePodSetCount(ctx, r.client, wl, podSets)
-				//a, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate)
+				log.Info("[VICENTE] JOB PODSETCOUNT", "PODSETCOUNT", jobPodSetCount)
+				toUpdate := wl
+				a, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate)
 				if err != nil {
 					log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED WITH ERRROR ", err)
 					return ctrl.Result{}, err
 				}
-
-				//err := workload.UpdatePodSetCount(ctx, r.client, wl, a)
-				//if err != nil {
-				//	log.Error(err, "Updating reclaimable pods")
-				//	return ctrl.Result{}, err
-				//}
 				log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED", a)
 				return ctrl.Result{}, nil
-
-				/*
-					if job.Spec.SchedulingGates == nil {
-						job.Spec.SchedulingGates = make([]corev1.PodSchedulingGate, 0)
-					}
-					job.Spec.SchedulingGates = append(p.Spec.SchedulingGates, corev1.PodSchedulingGate{Name: "kueue.x-k8s.io/admission"})
-
-					err := workload.UpdatePodSetCount(ctx, r.client, wl, int(workloadCount))
-					if err != nil {
-						log.Error(err, "Updating reclaimable pods")
-						return ctrl.Result{}, err
-					}
-					// Create the corresponding workload.
-					wl, err := r.constructWorkload(ctx, job, object)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
-					log.Info("[VICENTE] WORKLAOD CREWATED", "WORKLOADCOUNT", wl)
-					err = r.prepareWorkload(ctx, job, wl)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
-					log.Info("[VICENTE] WORKLAOD IS PREPRARED", "WORKLOADCOUNT", wl)
-					if err = r.client.Update(ctx, wl); err != nil {
-						return ctrl.Result{}, err
-					}
-					r.record.Eventf(object, corev1.EventTypeNormal, ReasonCreatedWorkload,
-						"Created Workload: %v", workload.Key(wl))
-					log.Info("[VICENTE] WORKLAOD WAS CREATED", "WORKLOADCOUNT", wl)
-					return ctrl.Result{}, nil */
 			}
 		}
+
 	}
 
 	// 5. handle WaitForPodsReady only for a standalone job.
@@ -764,13 +718,10 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 
 	jobPodSets := clearMinCountsIfFeatureDisabled(job.PodSets())
 	log := ctrl.LoggerFrom(ctx)
-	if features.Enabled(features.DynamicallySizedJobs) {
-		log.Info("[VICENTE] DYNAMIC JOBS IS ENABLED", wl.Spec)
-		return true
-	}
+
 	if runningPodSets := expectedRunningPodSets(ctx, c, wl); runningPodSets != nil {
 
-		log.Info("[VICENTE] THERE WAS NO ERROR IN RUNNINGPODSETS", wl.Spec)
+		log.Info("[VICENTE] RUNNING POD SETS IS NOT NIL", "WL.SPEC", wl.Spec)
 		if equality.ComparePodSetSlices(jobPodSets, runningPodSets) {
 			log.Info("[VICENTE] COMPARE POD SETS WAS TRUE", "JOBPODSETS", jobPodSets)
 			log.Info("[VICENTE] COMPARE POD SETS WAS TRUE", "RUNNINGPODSETS", runningPodSets)
@@ -779,6 +730,10 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "JOBPODSETS", jobPodSets)
 		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "RUNNINGPODSETS", runningPodSets)
 		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "WL", wl.Spec)
+		if features.Enabled(features.DynamicallySizedJobs) {
+			log.Info("[VICENTE] DYNAMIC JOBS IS ENABLED", "WL.SPEC", wl.Spec)
+			return true
+		}
 		// If the workload is admitted but the job is suspended, do the check
 		// against the non-running info.
 		// This might allow some violating jobs to pass equivalency checks, but their

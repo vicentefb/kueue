@@ -177,6 +177,7 @@ func (s *Scheduler) schedule(ctx context.Context) {
 	// 1. Get the heads from the queues, including their desired clusterQueue.
 	// This operation blocks while the queues are empty.
 	headWorkloads := s.queues.Heads(ctx)
+	log.Info("[VICENTE] INSIDE SCHEDULE ", "HEADWORKLOADS", headWorkloads)
 	// If there are no elements, it means that the program is finishing.
 	if len(headWorkloads) == 0 {
 		return
@@ -186,9 +187,11 @@ func (s *Scheduler) schedule(ctx context.Context) {
 	// 2. Take a snapshot of the cache.
 	snapshot := s.cache.Snapshot()
 	logSnapshotIfVerbose(log, &snapshot)
+	log.Info("[VICENTE] TAKE A SNAPSHOT", "SNAPSHOT", snapshot)
 
 	// 3. Calculate requirements (resource flavors, borrowing) for admitting workloads.
 	entries := s.nominate(ctx, headWorkloads, snapshot)
+	log.Info("[VICENTE] NOMINATED ENTRIES", "ENTRIES", entries)
 
 	// 4. Sort entries based on borrowing, priorities (if enabled) and timestamps.
 	sort.Sort(entryOrdering{
@@ -209,8 +212,11 @@ func (s *Scheduler) schedule(ctx context.Context) {
 		}
 
 		cq := snapshot.ClusterQueues[e.ClusterQueue]
+		log.Info("[VICENTE] INSIDE FOR LOOP ENTRIES", "CQ", cq)
 		if cq.Cohort != nil {
 			sum := cycleCohortsUsage.totalUsageForCommonFlavorResources(cq.Cohort.Name, e.assignment.Usage)
+			log.Info("[VICENTE] SUM FROM TOTAL USAGE FOR COMMON FLAVOR RESOURCES", "SUM", sum)
+			log.Info("[VICENTE] SUM FROM TOTAL USAGE FOR COMMON FLAVOR RESOURCES", "E ASSIGNMENT USAGE", e.assignment.Usage)
 			// If the workload uses resources that were potentially assumed in this cycle and will no longer fit in the
 			// cohort. If a resource of a flavor is used only once or for the first time in the cycle the checks done by
 			// the flavorassigner are still valid.
