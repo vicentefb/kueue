@@ -348,8 +348,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	// 4.1 update podSetCount if implemented by the job
-
+	// 4.1 update podSetCount
 	if features.Enabled(features.DynamicallySizedJobs) && wl != nil && workload.IsAdmitted(wl) {
 		podSets := job.PodSets()
 		jobPodSetCount := int32(0)
@@ -358,7 +357,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 			log.Info("[VICENTE] JOB POD SET COUNT BEFORE", "JOB POD SET COUNT VARIABLE", jobPodSetCount)
 
 			log.Info("[VICENTE] ADMISSION PODSET ASSIGNMENTS", "COUNT", wl.Status.Admission.PodSetAssignments[1].Count)
-			log.Info("[VICENTE] POD SETS COUNT", "COUNT", wl.Spec.PodSets[1].Count)
+			log.Info("[VICENTE] WORKLOAD POD SETS COUNT", "COUNT", wl.Spec.PodSets[1].Count)
 			if len(wl.Status.Admission.PodSetAssignments) > 1 && wl.Spec.PodSets[1].Count != jobPodSetCount {
 				log.Info("[VICENTE] REPLICAS AND WORKLOAD COUNT IS NOT THE SAME")
 				log.Info("[VICENTE] JOB PODSETCOUNT", "PODSETCOUNT", jobPodSetCount)
@@ -735,6 +734,9 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 			log.Info("[VICENTE] DYNAMIC JOBS IS ENABLED", "WL.SPEC", wl.Spec)
 			return true
 		}
+		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "JOBPODSETS", jobPodSets)
+		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "RUNNINGPODSETS", runningPodSets)
+		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "WL", wl.Spec)
 		// If the workload is admitted but the job is suspended, do the check
 		// against the non-running info.
 		// This might allow some violating jobs to pass equivalency checks, but their
