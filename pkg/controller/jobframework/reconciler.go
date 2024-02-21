@@ -363,6 +363,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 				log.Info("[VICENTE] REPLICAS AND WORKLOAD COUNT IS NOT THE SAME")
 				log.Info("[VICENTE] JOB PODSETCOUNT", "PODSETCOUNT", jobPodSetCount)
 				toUpdate := wl
+				log.Info("[VICENTE] WORKLOAD INFO BEFORE UPDATE", "WL INFO")
 				a, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate)
 				if err != nil {
 					log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED WITH ERRROR ", err)

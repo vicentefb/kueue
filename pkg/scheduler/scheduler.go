@@ -410,7 +410,9 @@ type resizeAssignment struct {
 func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
 	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
+	log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS", "FLAVOR ASSIGNER", flvAssigner)
 	resizeAssignment := flvAssigner.Assign(log, nil, false)
+	log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS", "RESIZE ASSIGNMENT", resizeAssignment)
 	var faPreemtionTargets []*workload.Info
 
 	arm := resizeAssignment.RepresentativeMode()
@@ -433,7 +435,9 @@ func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap
 func (s *Scheduler) getAssignments(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
 	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
+	log.Info("[VICENTE] INSIDE GETASSIGNMENTS", "FLAVOR ASSIGNER", flvAssigner)
 	fullAssignment := flvAssigner.Assign(log, nil, false)
+	log.Info("[VICENTE] INSIDE GETASSIGNMENTS", "FULLASSIGNMENT", fullAssignment)
 	var faPreemtionTargets []*workload.Info
 
 	arm := fullAssignment.RepresentativeMode()
@@ -540,6 +544,7 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 		ClusterQueue:      kueue.ClusterQueueReference(e.ClusterQueue),
 		PodSetAssignments: e.assignment.ToAPI(),
 	}
+	log.Info("[VICENTE] PODSETASSIGNMENTS", "PODS", admission.PodSetAssignments)
 
 	workload.SetQuotaReservation(newWorkload, admission)
 	if workload.HasAllChecks(newWorkload, mustHaveChecks) {

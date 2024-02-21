@@ -436,7 +436,7 @@ func (c *Cache) addOrUpdateWorkload(w *kueue.Workload) bool {
 	return clusterQueue.addWorkload(w) == nil
 }
 
-func (c *Cache) UpdateWorkload(oldWl, newWl *kueue.Workload) error {
+func (c *Cache) UpdateWorkload(log logr.Logger, oldWl, newWl *kueue.Workload) error {
 	c.Lock()
 	defer c.Unlock()
 	if workload.HasQuotaReservation(oldWl) {
@@ -458,6 +458,14 @@ func (c *Cache) UpdateWorkload(oldWl, newWl *kueue.Workload) error {
 	if c.podsReadyTracking {
 		c.podsReadyCond.Broadcast()
 	}
+
+	oldwi := workload.NewInfo(oldWl)
+	log.Info("[VICENTE] OLD WORKLOAD INFO", "WORKLOAD INFO", oldwi)
+
+	log.Info("[VICENTE] ADDING UPDATEDWORKLOAD", "NEW WORKLOAD", newWl.Spec)
+	wi := workload.NewInfo(newWl)
+	log.Info("[VICENTE] NEW WORKLOAD INFO", "WORKLOAD INFO", wi)
+
 	return cq.addWorkload(newWl)
 }
 

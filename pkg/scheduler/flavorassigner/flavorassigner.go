@@ -274,6 +274,7 @@ func (a *FlavorAssigner) Assign(log logr.Logger, counts []int32, resizeable bool
 	}
 
 	if len(counts) == 0 {
+		log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN COUNTS IS 0 THIS IS CALLED FROM THE SCHEDULER ", "REQUESTS", requests)
 		return a.assignFlavors(log, requests)
 	}
 
@@ -281,6 +282,7 @@ func (a *FlavorAssigner) Assign(log logr.Logger, counts []int32, resizeable bool
 	for i := range a.wl.TotalRequests {
 		currentResources[i] = *a.wl.TotalRequests[i].ScaledTo(counts[i])
 	}
+	log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN CURRENT RESOURCES FOR THE WORKLOAD", "CURRENTRESOURCES", currentResources)
 	return a.assignFlavors(log, currentResources)
 }
 
