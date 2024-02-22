@@ -99,7 +99,7 @@ type Info struct {
 	// Populated from the queue during admission or from the admission field if
 	// already admitted.
 	ClusterQueue   string
-	LastAssignment *AssigmentClusterQueueState
+	LastAssignment *AssignmentClusterQueueState
 
 	// List of total resources already admitted.
 	// Only applicable for resizeable jobs.
