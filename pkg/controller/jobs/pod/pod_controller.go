@@ -231,6 +231,7 @@ func ungatePod(pod *corev1.Pod) bool {
 // Run will inject the node affinity and podSet counts extracting from workload to job and unsuspend it.
 func (p *Pod) Run(ctx context.Context, c client.Client, podSetsInfo []podset.PodSetInfo, recorder record.EventRecorder, msg string) error {
 	log := ctrl.LoggerFrom(ctx)
+
 	if !p.isGroup {
 		if len(podSetsInfo) != 1 {
 			return fmt.Errorf("%w: expecting 1 pod set got %d", podset.ErrInvalidPodsetInfo, len(podSetsInfo))

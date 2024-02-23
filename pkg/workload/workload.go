@@ -139,7 +139,7 @@ func NewInfo(w *kueue.Workload) *Info {
 	info.TotalRequests = totalRequestsFromPodSets(w)
 	if w.Status.Admission != nil {
 		info.ClusterQueue = string(w.Status.Admission.ClusterQueue)
-		//info.TotalRequests = totalRequestsFromAdmission(w)
+		info.TotalRequests = totalRequestsFromAdmission(w)
 	} else {
 		//info.TotalRequests = totalRequestsFromPodSets(w)
 		info.AdmittedRequests = totalRequestsFromAdmission(w)
