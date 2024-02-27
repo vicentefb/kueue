@@ -326,7 +326,7 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 				// calculate the diff and add new entry for it.
 				e.assignment, e.preemptionTargets = s.getResizeAssignment(log, &e.Info, &snap)
 				e.inadmissibleMsg = e.assignment.Message()
-				//e.Info.LastAssignment = &e.assignment.LastState
+				e.Info.LastAssignment = &e.assignment.LastState
 
 				log.Info("[VICENTE] ADDING ENTRY FOR RESIZE", "RESIZE", e)
 				log.Info("[VICENTE] WORKLOAD", "W", w)
@@ -544,7 +544,7 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 		ClusterQueue:      kueue.ClusterQueueReference(e.ClusterQueue),
 		PodSetAssignments: e.assignment.ToAPI(),
 	}
-	log.Info("[VICENTE] PODSETASSIGNMENTS", "PODS", admission.PodSetAssignments)
+	log.Info("[VICENTE] ADMIT PODSETASSIGNMENTS", "PODS", admission.PodSetAssignments)
 
 	workload.SetQuotaReservation(newWorkload, admission)
 	if workload.HasAllChecks(newWorkload, mustHaveChecks) {

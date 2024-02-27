@@ -465,7 +465,6 @@ func (c *Cache) UpdateWorkload(log logr.Logger, oldWl, newWl *kueue.Workload) er
 	log.Info("[VICENTE] ADDING UPDATEDWORKLOAD", "NEW WORKLOAD", newWl.Spec)
 	wi := workload.NewInfo(newWl)
 	log.Info("[VICENTE] NEW WORKLOAD INFO", "WORKLOAD INFO", wi)
-
 	return cq.addWorkload(newWl)
 }
 

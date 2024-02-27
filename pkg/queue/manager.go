@@ -321,20 +321,28 @@ func (m *Manager) addOrUpdateWorkload(w *kueue.Workload) bool {
 func (m *Manager) RequeueWorkload(ctx context.Context, info *workload.Info, reason RequeueReason) bool {
 	m.Lock()
 	defer m.Unlock()
-
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD", "info: ", info)
 	var w kueue.Workload
 	// Always get the newest workload to avoid requeuing the out-of-date obj.
 	err := m.client.Get(ctx, client.ObjectKeyFromObject(info.Obj), &w)
+	log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD", "workload: ", w.Spec)
 	// Since the client is cached, the only possible error is NotFound
+	if workload.HasQuotaReservation(&w) {
+		log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD WORKLOAD HAS QUOTA", "info: ", w)
+	}
 	if apierrors.IsNotFound(err) || workload.HasQuotaReservation(&w) {
+		log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD API ERROR FOUN D", "info: ", info)
 		return false
 	}
 
 	q := m.localQueues[workload.QueueKey(&w)]
 	if q == nil {
+		log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD Q is nill", "info: ", info)
 		return false
 	}
 	info.Update(&w)
+	log.Info("[VICENTE] REQUEUEWORKLOAD AFTER UPDATE", "info: ", info)
 	q.AddOrUpdate(info)
 	cq := m.clusterQueues[q.ClusterQueue]
 	if cq == nil {
@@ -346,6 +354,7 @@ func (m *Manager) RequeueWorkload(ctx context.Context, info *workload.Info, reas
 	if added {
 		m.Broadcast()
 	}
+	log.Info("[VICENTE] REQUEUEWORKLOAD ADDED", "added: ", added)
 	return added
 }
 

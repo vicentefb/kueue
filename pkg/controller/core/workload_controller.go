@@ -585,9 +585,24 @@ func (r *WorkloadReconciler) Update(e event.UpdateEvent) bool {
 		// Workload update in the cache is handled here; however, some fields are immutable
 		// and are not supposed to actually change anything.
 		log.Info("[VICENTE] UPDATING WORKLOAD INSIDE WORKLOAD CONTROLLER", "WORKLOAD", wlCopy.Spec)
+
 		if err := r.cache.UpdateWorkload(log, oldWl, wlCopy); err != nil {
 			log.Error(err, "Updating workload in cache")
 		}
+
+		/*
+
+			if err := r.cache.UpdateWorkload(log, oldWl, wlCopy); err != nil {
+				log.Error(err, "Updating workload in cache")
+			}
+				newwi := workload.NewInfo(wlCopy)
+				if a := r.queues.RequeueWorkload(ctx, newwi, queue.RequeueReasonGeneric); !a {
+					log.Info("[VICENTE] NOT ADDED")
+				}
+
+					if err := r.cache.UpdateWorkload(log, oldWl, wlCopy); err != nil {
+						log.Error(err, "Updating workload in cache")
+					} */
 	}
 
 	return true

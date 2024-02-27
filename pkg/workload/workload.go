@@ -136,12 +136,14 @@ func NewInfo(w *kueue.Workload) *Info {
 	info := &Info{
 		Obj: w,
 	}
-	info.TotalRequests = totalRequestsFromPodSets(w)
+
 	if w.Status.Admission != nil {
 		info.ClusterQueue = string(w.Status.Admission.ClusterQueue)
 		info.TotalRequests = totalRequestsFromAdmission(w)
-	} else {
+		info.PendingRequests = diffRequestsFromPodSets(w)
 		//info.TotalRequests = totalRequestsFromPodSets(w)
+	} else {
+		info.TotalRequests = totalRequestsFromPodSets(w)
 		info.AdmittedRequests = totalRequestsFromAdmission(w)
 		info.PendingRequests = diffRequestsFromPodSets(w)
 	}
@@ -188,6 +190,7 @@ func diffRequestsFromPodSets(wl *kueue.Workload) []PodSetResources {
 
 func (i *Info) Update(wl *kueue.Workload) {
 	i.Obj = wl
+	i.PendingRequests = diffRequestsFromPodSets(wl)
 }
 
 func (i *Info) CanBePartiallyAdmitted() bool {
