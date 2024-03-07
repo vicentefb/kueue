@@ -85,7 +85,7 @@ const (
 	LendingLimit featuregate.Feature = "LendingLimit"
 	// owner: @vicenteferrara
 	// kep: <TODO>
-	// alpha: v0.6
+	// alpha: v0.7
 	DynamicallySizedJobs featuregate.Feature = "DynamicallySizedJobs"
 )
 

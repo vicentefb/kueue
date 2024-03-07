@@ -264,6 +264,7 @@ func (s *Scheduler) schedule(ctx context.Context) {
 		if e.status == assumed {
 			continue
 		}
+		e.status = nominated
 		if err := s.admit(ctx, e, cq.AdmissionChecks); err != nil {
 			e.inadmissibleMsg = fmt.Sprintf("Failed to admit workload: %v", err)
 		}

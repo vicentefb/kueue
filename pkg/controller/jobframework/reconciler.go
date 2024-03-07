@@ -534,13 +534,9 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 			return nil, err
 		}
 	}
-	log.Info("[VICENTE] INSIDE ENSUREONEWORKLOAD")
-	log.Info("[VICENTE] JOB", "JOB:", job)
-	log.Info("[VICENTE] JOB IS SUSPENDED", "JOBISSUSPENDED()", job.IsSuspended())
-	log.Info("[VICENTE] MATCH", "MATCH:", match)
+
 	var toUpdate *kueue.Workload
 	if match == nil && len(toDelete) > 0 && job.IsSuspended() && !workload.HasQuotaReservation(toDelete[0]) {
-		log.Info("[VICENTE] TO UPDATE")
 		toUpdate = toDelete[0]
 		toDelete = toDelete[1:]
 	}
@@ -553,7 +549,6 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 			// The job may have been modified and hence the existing workload
 			// doesn't match the job anymore. All bets are off if there are more
 			// than one workload...
-			log.Info("[VICENTE] THE JOB WAS MODIFIED", "TODELETE:", toDelete)
 			w = toDelete[0]
 		}
 
@@ -564,8 +559,6 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 			} else {
 				msg = "No matching Workload; restoring pod templates according to existent Workload"
 			}
-			log.Info("[VICENTE] STOPPING THE JOB", "JOB:", job)
-			//log.Info(msg)
 			if err := r.stopJob(ctx, job, w, StopReasonNoMatchingWorkload, msg); err != nil {
 				return nil, fmt.Errorf("stopping job with no matching workload: %w", err)
 			}
@@ -665,14 +658,11 @@ func (r *JobReconciler) ensurePrebuiltWorkloadInSync(ctx context.Context, wl *ku
 // expectedRunningPodSets gets the expected podsets during the job execution, returns nil if the workload has no reservation or
 // the admission does not match.
 func expectedRunningPodSets(ctx context.Context, c client.Client, wl *kueue.Workload) []kueue.PodSet {
-	log := ctrl.LoggerFrom(ctx)
 	if !workload.HasQuotaReservation(wl) {
-		log.Info("[VICENTE] WORKLOAD HAS NO QUOTA RESERVATION")
 		return nil
 	}
 	info, err := getPodSetsInfoFromStatus(ctx, c, wl)
 	if err != nil {
-		log.Info("[VICENTE] ERROR GETTIGN POD SETS INFO")
 		return nil
 	}
 	infoMap := slices.ToRefMap(info, func(psi *podset.PodSetInfo) string { return psi.Name })
@@ -706,6 +696,7 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 	}
 
 	jobPodSets := clearMinCountsIfFeatureDisabled(job.PodSets())
+
 	if runningPodSets := expectedRunningPodSets(ctx, c, wl); runningPodSets != nil {
 		if equality.ComparePodSetSlices(jobPodSets, runningPodSets) || features.Enabled(features.DynamicallySizedJobs) {
 			return true
@@ -716,6 +707,7 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 		// workloads would be invalidated in the next sync after unsuspending.
 		return job.IsSuspended() && equality.ComparePodSetSlices(jobPodSets, wl.Spec.PodSets)
 	}
+
 	return equality.ComparePodSetSlices(jobPodSets, wl.Spec.PodSets)
 }
 
@@ -725,11 +717,9 @@ func (r *JobReconciler) updateWorkloadToMatchJob(ctx context.Context, job Generi
 		return nil, fmt.Errorf("can't construct workload for update: %w", err)
 	}
 	err = r.prepareWorkload(ctx, job, newWl)
-
 	if err != nil {
 		return nil, fmt.Errorf("can't construct workload for update: %w", err)
 	}
-
 	wl.Spec = newWl.Spec
 	if err = r.client.Update(ctx, wl); err != nil {
 		return nil, fmt.Errorf("updating existed workload: %w", err)
@@ -829,7 +819,7 @@ func (r *JobReconciler) constructWorkload(ctx context.Context, job GenericJob, o
 	}
 
 	podSets := job.PodSets()
-	log.Info("[VICENTE] INSIDE CONSTRUCT WORKLOAD", "PODSETS", podSets)
+
 	wl := &kueue.Workload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       GetWorkloadNameForOwnerWithGVK(object.GetName(), object.GetUID(), job.GVK()),
