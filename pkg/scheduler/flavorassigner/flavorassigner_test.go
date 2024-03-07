@@ -2287,7 +2287,7 @@ func TestAssignFlavors(t *testing.T) {
 			tc.clusterQueue.UpdateWithFlavors(resourceFlavors)
 			tc.clusterQueue.UpdateRGByResource()
 			flvAssigner := New(wlInfo, &tc.clusterQueue, resourceFlavors)
-			assignment := flvAssigner.Assign(log, nil, false)
+			assignment := flvAssigner.Assign(log, nil)
 			if repMode := assignment.RepresentativeMode(); repMode != tc.wantRepMode {
 				t.Errorf("e.assignFlavors(_).RepresentativeMode()=%s, want %s", repMode, tc.wantRepMode)
 			}

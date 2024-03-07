@@ -114,6 +114,9 @@ func (w *RayClusterWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj r
 	log := ctrl.LoggerFrom(ctx).WithName("raycluster-webhook")
 	if w.manageJobsWithoutQueueName || jobframework.QueueName((*RayCluster)(newJob)) != "" {
 		log.Info("Validating update", "job", klog.KObj(newJob))
+		log.Info("[VICENTE] OLD JOB", "OLD JOB", oldJob.Spec)
+		log.Info("[VICENTE] NEW JOB", "NEW JOB", newJob.Spec)
+		//newJob.Spec.WorkerGroupSpecs[0].Template.Spec
 		allErrors := jobframework.ValidateUpdateForQueueName((*RayCluster)(oldJob), (*RayCluster)(newJob))
 		allErrors = append(allErrors, w.validateCreate(newJob)...)
 		allErrors = append(allErrors, jobframework.ValidateUpdateForWorkloadPriorityClassName((*RayCluster)(oldJob), (*RayCluster)(newJob))...)

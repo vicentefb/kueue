@@ -348,27 +348,18 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	// 4.1 update podSetCount
+	// 4.1 update podSetCount for RayCluster resize
 	if features.Enabled(features.DynamicallySizedJobs) && wl != nil && workload.IsAdmitted(wl) {
 		podSets := job.PodSets()
-		jobPodSetCount := int32(0)
-		if len(podSets) > 1 {
-			jobPodSetCount = podSets[1].Count
-			log.Info("[VICENTE] JOB POD SET COUNT BEFORE", "JOB POD SET COUNT VARIABLE", jobPodSetCount)
-
-			log.Info("[VICENTE] ADMISSION PODSET ASSIGNMENTS", "COUNT", wl.Status.Admission.PodSetAssignments[1].Count)
-			log.Info("[VICENTE] WORKLOAD POD SETS COUNT", "COUNT", wl.Spec.PodSets[1].Count)
-			if len(wl.Status.Admission.PodSetAssignments) > 1 && wl.Spec.PodSets[1].Count != jobPodSetCount {
-				log.Info("[VICENTE] REPLICAS AND WORKLOAD COUNT IS NOT THE SAME")
-				log.Info("[VICENTE] JOB PODSETCOUNT", "PODSETCOUNT", jobPodSetCount)
+		if len(podSets) == 2 {
+			jobPodSetCount := podSets[1].Count
+			workloadPodSetCount := wl.Spec.PodSets[1].Count
+			if workloadPodSetCount != jobPodSetCount {
 				toUpdate := wl
-				log.Info("[VICENTE] WORKLOAD INFO BEFORE UPDATE", "WL INFO")
-				a, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate)
+				_, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate, "Updated Workload due to resize: %v")
 				if err != nil {
-					log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED WITH ERRROR ", err)
 					return ctrl.Result{}, err
 				}
-				log.Info("[VICENTE] UPDATED POD SETS FROM JOB", "UPDATED", a)
 				return ctrl.Result{}, nil
 			}
 		}
@@ -603,15 +594,13 @@ func (r *JobReconciler) ensureOneWorkload(ctx context.Context, job GenericJob, o
 
 	if existedWls != 0 {
 		if match == nil {
-			log.Info("[VICENTE] UPDATING THE JOB", "JOB:", job)
-			//return r.updateWorkloadToMatchJob(ctx, job, object, toDelete[0])
 			return nil, fmt.Errorf("%w: deleted %d workloads", ErrNoMatchingWorkloads, len(toDelete))
 		}
 		return nil, fmt.Errorf("%w: deleted %d workloads", ErrExtraWorkloads, len(toDelete))
 	}
 
 	if toUpdate != nil {
-		return r.updateWorkloadToMatchJob(ctx, job, object, toUpdate)
+		return r.updateWorkloadToMatchJob(ctx, job, object, toUpdate, "Updated not matching Workload for suspended job: %v")
 	}
 
 	return match, nil
@@ -717,41 +706,21 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 	}
 
 	jobPodSets := clearMinCountsIfFeatureDisabled(job.PodSets())
-	log := ctrl.LoggerFrom(ctx)
-
 	if runningPodSets := expectedRunningPodSets(ctx, c, wl); runningPodSets != nil {
-
-		log.Info("[VICENTE] RUNNING POD SETS IS NOT NIL", "WL.SPEC", wl.Spec)
-		if equality.ComparePodSetSlices(jobPodSets, runningPodSets) {
-			log.Info("[VICENTE] COMPARE POD SETS WAS TRUE", "JOBPODSETS", jobPodSets)
-			log.Info("[VICENTE] COMPARE POD SETS WAS TRUE", "RUNNINGPODSETS", runningPodSets)
+		if equality.ComparePodSetSlices(jobPodSets, runningPodSets) || features.Enabled(features.DynamicallySizedJobs) {
 			return true
 		}
-		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "JOBPODSETS", jobPodSets)
-		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "RUNNINGPODSETS", runningPodSets)
-		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "WL", wl.Spec)
-		if features.Enabled(features.DynamicallySizedJobs) {
-			log.Info("[VICENTE] DYNAMIC JOBS IS ENABLED", "WL.SPEC", wl.Spec)
-			return true
-		}
-		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "JOBPODSETS", jobPodSets)
-		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "RUNNINGPODSETS", runningPodSets)
-		log.Info("[VICENTE] COMPARE POD SETS WAS FALSE", "WL", wl.Spec)
 		// If the workload is admitted but the job is suspended, do the check
 		// against the non-running info.
 		// This might allow some violating jobs to pass equivalency checks, but their
 		// workloads would be invalidated in the next sync after unsuspending.
 		return job.IsSuspended() && equality.ComparePodSetSlices(jobPodSets, wl.Spec.PodSets)
 	}
-	log.Info("[VICENTE] RUNNING POD SETS WAS FALSE", "wl.spec: ", wl.Spec)
 	return equality.ComparePodSetSlices(jobPodSets, wl.Spec.PodSets)
 }
 
-func (r *JobReconciler) updateWorkloadToMatchJob(ctx context.Context, job GenericJob, object client.Object, wl *kueue.Workload) (*kueue.Workload, error) {
+func (r *JobReconciler) updateWorkloadToMatchJob(ctx context.Context, job GenericJob, object client.Object, wl *kueue.Workload, message string) (*kueue.Workload, error) {
 	newWl, err := r.constructWorkload(ctx, job, object)
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("[VICENTE] CONSTRUCTED A WORKLOAD", "ERROR:", err)
-	log.Info("[VICENTE] CONSTRUCTED A WORKLOAD", "NEWL:", newWl)
 	if err != nil {
 		return nil, fmt.Errorf("can't construct workload for update: %w", err)
 	}
@@ -760,20 +729,14 @@ func (r *JobReconciler) updateWorkloadToMatchJob(ctx context.Context, job Generi
 	if err != nil {
 		return nil, fmt.Errorf("can't construct workload for update: %w", err)
 	}
-	log.Info("[VICENTE] PREPARED WORKLOAD", "ERROR:", err)
-	log.Info("[VICENTE] PREPARED WORKLOAD NEWL", "NEWL:", newWl)
-	log.Info("[VICENTE] PREPARED WORKLOAD NEWSPEC", "NEWL:", newWl.Spec)
-	log.Info("[VICENTE] PREPARED WORKLOAD ORIGINAL WL", "WL:", wl)
-	log.Info("[VICENTE] PREPARED WORKLOAD ORIGINAL WL SPEC", "WL:", wl.Spec)
+
 	wl.Spec = newWl.Spec
-	log.Info("[VICENTE] UPDATED PREPARED WORKLOAD ORIGINAL WL SPEC", "WL:", wl.Spec)
 	if err = r.client.Update(ctx, wl); err != nil {
 		return nil, fmt.Errorf("updating existed workload: %w", err)
 	}
 
-	log.Info("[VICENTE] UPDATED WORKLOAD SPEC")
 	r.record.Eventf(object, corev1.EventTypeNormal, ReasonUpdatedWorkload,
-		"Updated not matching Workload for suspended job: %v", klog.KObj(wl))
+		message, klog.KObj(wl))
 	return newWl, nil
 }
 

@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/kueue/pkg/cache"
 	"sigs.k8s.io/kueue/pkg/constants"
 	"sigs.k8s.io/kueue/pkg/controller/core/indexer"
+	"sigs.k8s.io/kueue/pkg/features"
 	"sigs.k8s.io/kueue/pkg/queue"
 	"sigs.k8s.io/kueue/pkg/util/slices"
 	"sigs.k8s.io/kueue/pkg/workload"
@@ -584,25 +585,14 @@ func (r *WorkloadReconciler) Update(e event.UpdateEvent) bool {
 	default:
 		// Workload update in the cache is handled here; however, some fields are immutable
 		// and are not supposed to actually change anything.
-		log.Info("[VICENTE] UPDATING WORKLOAD INSIDE WORKLOAD CONTROLLER", "WORKLOAD", wlCopy.Spec)
-
-		if err := r.cache.UpdateWorkload(log, oldWl, wlCopy); err != nil {
+		if err := r.cache.UpdateWorkload(oldWl, wlCopy); err != nil {
 			log.Error(err, "Updating workload in cache")
 		}
-
-		/*
-
-			if err := r.cache.UpdateWorkload(log, oldWl, wlCopy); err != nil {
-				log.Error(err, "Updating workload in cache")
-			}
-				newwi := workload.NewInfo(wlCopy)
-				if a := r.queues.RequeueWorkload(ctx, newwi, queue.RequeueReasonGeneric); !a {
-					log.Info("[VICENTE] NOT ADDED")
-				}
-
-					if err := r.cache.UpdateWorkload(log, oldWl, wlCopy); err != nil {
-						log.Error(err, "Updating workload in cache")
-					} */
+		// This forces you to go through the scheduler to update PodSetAssignments for example.
+		log.Info("[VICENTE] UPDATING WORKLOAD INSIDE WORKLOAD CONTROLLER THROUGH THE QUEUE", "WORKLOAD", wlCopy.Spec)
+		if features.Enabled(features.DynamicallySizedJobs) && !r.queues.UpdateWorkload(oldWl, wlCopy) {
+			log.V(2).Info("Queue for updated workload didn't exist; ignoring for now")
+		}
 	}
 
 	return true

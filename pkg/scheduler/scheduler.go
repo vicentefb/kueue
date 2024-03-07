@@ -212,11 +212,8 @@ func (s *Scheduler) schedule(ctx context.Context) {
 		}
 
 		cq := snapshot.ClusterQueues[e.ClusterQueue]
-		log.Info("[VICENTE] INSIDE FOR LOOP ENTRIES", "CQ", cq)
 		if cq.Cohort != nil {
 			sum := cycleCohortsUsage.totalUsageForCommonFlavorResources(cq.Cohort.Name, e.assignment.Usage)
-			log.Info("[VICENTE] SUM FROM TOTAL USAGE FOR COMMON FLAVOR RESOURCES", "SUM", sum)
-			log.Info("[VICENTE] SUM FROM TOTAL USAGE FOR COMMON FLAVOR RESOURCES", "E ASSIGNMENT USAGE", e.assignment.Usage)
 			// If the workload uses resources that were potentially assumed in this cycle and will no longer fit in the
 			// cohort. If a resource of a flavor is used only once or for the first time in the cycle the checks done by
 			// the flavorassigner are still valid.
@@ -264,7 +261,9 @@ func (s *Scheduler) schedule(ctx context.Context) {
 			s.cache.WaitForPodsReady(ctx)
 			log.V(5).Info("Finished waiting for all admitted workloads to be in the PodsReady condition")
 		}
-		e.status = nominated
+		if e.status == assumed {
+			continue
+		}
 		if err := s.admit(ctx, e, cq.AdmissionChecks); err != nil {
 			e.inadmissibleMsg = fmt.Sprintf("Failed to admit workload: %v", err)
 		}
@@ -320,26 +319,24 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 		ns := corev1.Namespace{}
 		e := entry{Info: w}
 		if s.cache.IsAssumedOrAdmittedWorkload(w) {
-			//log.Info("Workload skipped from admission because it's already assumed or admitted", "workload", klog.KObj(w.Obj))
-			//continue
 			if features.Enabled(features.DynamicallySizedJobs) {
-				// calculate the diff and add new entry for it.
+				// here we want to get the flavors and resources assigned again so that we can update PodSetAssignments
 				e.assignment, e.preemptionTargets = s.getResizeAssignment(log, &e.Info, &snap)
 				e.inadmissibleMsg = e.assignment.Message()
 				e.Info.LastAssignment = &e.assignment.LastState
+				e.status = assumed
 
 				log.Info("[VICENTE] ADDING ENTRY FOR RESIZE", "RESIZE", e)
 				log.Info("[VICENTE] WORKLOAD", "W", w)
+				if err := s.updateResizePodSetAssignments(ctx, e); err != nil {
+					log.Error(err, "Could not apploy admission to assumed workload")
+					continue
+				}
+
 			} else {
 				log.Info("Workload skipped from admission because it's already assumed or admitted", "workload", klog.KObj(w.Obj))
 				continue
 			}
-			// here update such that an already admitted workload still need to be evaluated
-			// against the desired workload and what is in podset assignment
-
-			// diffEntry := entry{Info: w}
-
-			// calculate diff of assignment based on spec and status?
 		} else if workload.HasRetryOrRejectedChecks(w.Obj) {
 			e.inadmissibleMsg = "The workload has failed admission checks"
 		} else if snap.InactiveClusterQueueSets.Has(w.ClusterQueue) {
@@ -356,13 +353,13 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 		} else if err := s.validateLimitRange(ctx, &w); err != nil {
 			e.inadmissibleMsg = err.Error()
 		} else {
+			log.Info("[VICENTE] WORKLOAD ISNT ASSUMED", "ENTRIES", entries)
 			e.assignment, e.preemptionTargets = s.getAssignments(log, &e.Info, &snap)
 			e.inadmissibleMsg = e.assignment.Message()
 			e.Info.LastAssignment = &e.assignment.LastState
 		}
 		entries = append(entries, e)
 	}
-	log.Info("[VICENTE] WORKLOAD ISNT ASSUMED", "ENTRIES", entries)
 	return entries
 }
 
@@ -403,20 +400,17 @@ type partialAssignment struct {
 	preemptionTargets []*workload.Info
 }
 
-type resizeAssignment struct {
-	assignment flavorassigner.Assignment
-}
-
 func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
 	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
 	log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS", "FLAVOR ASSIGNER", flvAssigner)
-	resizeAssignment := flvAssigner.Assign(log, nil, false)
+	resizeAssignment := flvAssigner.Assign(log, nil)
 	log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS", "RESIZE ASSIGNMENT", resizeAssignment)
 	var faPreemtionTargets []*workload.Info
 
 	arm := resizeAssignment.RepresentativeMode()
 	if arm == flavorassigner.Fit {
+		log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS TEHRE IS A FIT", "RESIZE ASSIGNMENT", resizeAssignment)
 		return resizeAssignment, nil
 	}
 
@@ -434,9 +428,11 @@ func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap
 
 func (s *Scheduler) getAssignments(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
+	aa := wl.Obj.Status.Admission
+	log.Info("adf", "a", aa)
 	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
 	log.Info("[VICENTE] INSIDE GETASSIGNMENTS", "FLAVOR ASSIGNER", flvAssigner)
-	fullAssignment := flvAssigner.Assign(log, nil, false)
+	fullAssignment := flvAssigner.Assign(log, nil)
 	log.Info("[VICENTE] INSIDE GETASSIGNMENTS", "FULLASSIGNMENT", fullAssignment)
 	var faPreemtionTargets []*workload.Info
 
@@ -456,7 +452,7 @@ func (s *Scheduler) getAssignments(log logr.Logger, wl *workload.Info, snap *cac
 
 	if wl.CanBePartiallyAdmitted() {
 		reducer := flavorassigner.NewPodSetReducer(wl.Obj.Spec.PodSets, func(nextCounts []int32) (*partialAssignment, bool) {
-			assignment := flvAssigner.Assign(log, nextCounts, false)
+			assignment := flvAssigner.Assign(log, nextCounts)
 			if assignment.RepresentativeMode() == flavorassigner.Fit {
 				return &partialAssignment{assignment: assignment}, true
 			}
@@ -537,6 +533,33 @@ func (s *Scheduler) validateLimitRange(ctx context.Context, wi *workload.Info) e
 // admit sets the admitting clusterQueue and flavors into the workload of
 // the entry, and asynchronously updates the object in the apiserver after
 // assuming it in the cache.
+func (s *Scheduler) updateResizePodSetAssignments(ctx context.Context, e entry) error {
+	log := ctrl.LoggerFrom(ctx)
+	newWorkload := e.Obj.DeepCopy()
+	admission := &kueue.Admission{
+		ClusterQueue:      kueue.ClusterQueueReference(e.ClusterQueue),
+		PodSetAssignments: e.assignment.ToAPI(),
+	}
+	log.Info("[VICENTE] updateResizePodSetAssignments PODSETASSIGNMENTS", "PODS", admission.PodSetAssignments)
+
+	workload.SetQuotaReservation(newWorkload, admission)
+	log.Info("[VICENTE] updateResizePodSetAssignments SET QUOTA RESERVATION", "newWorkload", newWorkload.Spec)
+	log.Info("[VICENTE] updateResizePodSetAssignments SET QUOTA RESERVATION", "newWorkload", newWorkload.Status.Admission)
+	_ = workload.SyncAdmittedCondition(newWorkload)
+
+	if e.status == assumed {
+		// Apply admission means to update the workload with the new admission status, this is for the case of a scale down
+		// we shouldn't requeue a scale down we should only update the workload
+		//
+		return s.applyAdmission(ctx, newWorkload)
+	}
+
+	return nil
+}
+
+// admit sets the admitting clusterQueue and flavors into the workload of
+// the entry, and asynchronously updates the object in the apiserver after
+// assuming it in the cache.
 func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set[string]) error {
 	log := ctrl.LoggerFrom(ctx)
 	newWorkload := e.Obj.DeepCopy()
@@ -547,10 +570,15 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 	log.Info("[VICENTE] ADMIT PODSETASSIGNMENTS", "PODS", admission.PodSetAssignments)
 
 	workload.SetQuotaReservation(newWorkload, admission)
+	log.Info("[VICENTE] ADMIT SET QUOTA RESERVATION", "newWorkload", newWorkload.Spec)
+	log.Info("[VICENTE] ADMIT SET QUOTA RESERVATION", "newWorkload", newWorkload.Status.Admission)
 	if workload.HasAllChecks(newWorkload, mustHaveChecks) {
 		// sync Admitted, ignore the result since an API update is always done.
+		log.Info("[VICENTE] ADMIT HAS ALL CHECKS", "newWorkload", mustHaveChecks)
 		_ = workload.SyncAdmittedCondition(newWorkload)
+
 	}
+
 	if err := s.cache.AssumeWorkload(newWorkload); err != nil {
 		return err
 	}
@@ -559,7 +587,9 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 
 	s.admissionRoutineWrapper.Run(func() {
 		err := s.applyAdmission(ctx, newWorkload)
+		log.Info("[VICENTE] ADMIT AFTER APPLYING ADMISSION ON NEW WORKLOAD", "newWorkload", newWorkload)
 		if err == nil {
+			log.Info("[VICENTE] ADMIT AFTER APPLYING ADMISSION ERROR IS NIL", "newWorkload", newWorkload)
 			waitStarted := e.Obj.CreationTimestamp.Time
 			if c := apimeta.FindStatusCondition(e.Obj.Status.Conditions, kueue.WorkloadEvicted); c != nil {
 				waitStarted = c.LastTransitionTime.Time
@@ -573,6 +603,7 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 			log.V(2).Info("Workload successfully admitted and assigned flavors", "assignments", admission.PodSetAssignments)
 			return
 		}
+		log.Info("[VICENTE] ADMIT AFTER APPLYING ADMISSION ERROR COULD BE NOT NIL", "ERROR", err)
 		// Ignore errors because the workload or clusterQueue could have been deleted
 		// by an event.
 		_ = s.cache.ForgetWorkload(newWorkload)

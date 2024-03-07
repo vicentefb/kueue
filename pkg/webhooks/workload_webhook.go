@@ -189,12 +189,12 @@ func validateContainer(c *corev1.Container, path *field.Path) field.ErrorList {
 func validateAdmissionChecks(obj *kueue.Workload, basePath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	for i := range obj.Status.AdmissionChecks {
-		//admissionChecksPath := basePath.Index(i)
+		admissionChecksPath := basePath.Index(i)
 		ac := &obj.Status.AdmissionChecks[i]
 		if len(ac.PodSetUpdates) > 0 && len(ac.PodSetUpdates) != len(obj.Spec.PodSets) {
-			//allErrs = append(allErrs, field.Invalid(admissionChecksPath.Child("podSetUpdates"), field.OmitValueType{}, "must have the same number of podSetUpdates as the podSets"))
+			allErrs = append(allErrs, field.Invalid(admissionChecksPath.Child("podSetUpdates"), field.OmitValueType{}, "must have the same number of podSetUpdates as the podSets"))
 		}
-		//allErrs = append(allErrs, validatePodSetUpdates(ac, obj, admissionChecksPath.Child("podSetUpdates"))...)
+		allErrs = append(allErrs, validatePodSetUpdates(ac, obj, admissionChecksPath.Child("podSetUpdates"))...)
 	}
 	return allErrs
 }
@@ -230,7 +230,7 @@ func validateImmutablePodSetUpdates(newObj, oldObj *kueue.Workload, basePath *fi
 			continue
 		}
 		if oldAc.State == kueue.CheckStateReady && newAc.State == kueue.CheckStateReady {
-			//allErrs = append(allErrs, apivalidation.ValidateImmutableField(newAc.PodSetUpdates, oldAc.PodSetUpdates, basePath.Index(i).Child("podSetUpdates"))...)
+			allErrs = append(allErrs, apivalidation.ValidateImmutableField(newAc.PodSetUpdates, oldAc.PodSetUpdates, basePath.Index(i).Child("podSetUpdates"))...)
 		}
 	}
 	return allErrs
@@ -294,7 +294,7 @@ func validateAdmission(obj *kueue.Workload, path *field.Path) field.ErrorList {
 	}
 	assignmentsPath := path.Child("podSetAssignments")
 	if names.Len() != len(admission.PodSetAssignments) {
-		//allErrs = append(allErrs, field.Invalid(assigmentsPath, field.OmitValueType{}, "must have the same number of podSets as the spec"))
+		allErrs = append(allErrs, field.Invalid(assignmentsPath, field.OmitValueType{}, "must have the same number of podSets as the spec"))
 	}
 
 	for i, ps := range admission.PodSetAssignments {
@@ -347,7 +347,6 @@ func ValidateWorkloadUpdate(newObj, oldObj *kueue.Workload) field.ErrorList {
 	allErrs = append(allErrs, ValidateWorkload(newObj)...)
 
 	if workload.HasQuotaReservation(oldObj) {
-		//allErrs = append(allErrs, apivalidation.ValidateImmutableField(newObj.Spec.PodSets, oldObj.Spec.PodSets, specPath.Child("podSets"))...)
 		allErrs = append(allErrs, apivalidation.ValidateImmutableField(newObj.Spec.PriorityClassSource, oldObj.Spec.PriorityClassSource, specPath.Child("priorityClassSource"))...)
 		allErrs = append(allErrs, apivalidation.ValidateImmutableField(newObj.Spec.PriorityClassName, oldObj.Spec.PriorityClassName, specPath.Child("priorityClassName"))...)
 	}
@@ -355,19 +354,9 @@ func ValidateWorkloadUpdate(newObj, oldObj *kueue.Workload) field.ErrorList {
 		allErrs = append(allErrs, apivalidation.ValidateImmutableField(newObj.Spec.QueueName, oldObj.Spec.QueueName, specPath.Child("queueName"))...)
 		allErrs = append(allErrs, validateReclaimablePodsUpdate(newObj, oldObj, field.NewPath("status", "reclaimablePods"))...)
 	}
-	allErrs = append(allErrs, validateAdmissionUpdate(newObj.Status.Admission, oldObj.Status.Admission, field.NewPath("status", "admission"))...)
 	allErrs = append(allErrs, validateImmutablePodSetUpdates(newObj, oldObj, statusPath.Child("admissionChecks"))...)
 
 	return allErrs
-}
-
-// validateAdmissionUpdate validates that admission can be set or unset, but the
-// fields within can't change.
-func validateAdmissionUpdate(new, old *kueue.Admission, path *field.Path) field.ErrorList {
-	if old == nil || new == nil {
-		return nil
-	}
-	return apivalidation.ValidateImmutableField(new, old, path)
 }
 
 // validateReclaimablePodsUpdate validates that the reclaimable counts do not decrease, this should be checked

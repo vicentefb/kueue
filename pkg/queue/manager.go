@@ -332,7 +332,8 @@ func (m *Manager) RequeueWorkload(ctx context.Context, info *workload.Info, reas
 		log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD WORKLOAD HAS QUOTA", "info: ", w)
 	}
 	if apierrors.IsNotFound(err) || workload.HasQuotaReservation(&w) {
-		log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD API ERROR FOUN D", "info: ", info)
+		log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD API ERROR FOUN D", "info: ", info.Obj)
+		log.Info("[VICENTE] WE ENTERED REQUEUEWORKLOAD API ERROR IS", "error: ", err)
 		return false
 	}
 
@@ -344,13 +345,17 @@ func (m *Manager) RequeueWorkload(ctx context.Context, info *workload.Info, reas
 	info.Update(&w)
 	log.Info("[VICENTE] REQUEUEWORKLOAD AFTER UPDATE", "info: ", info)
 	q.AddOrUpdate(info)
+	log.Info("[VICENTE] REQUEUEWORKLOAD AFTER ADDORUPDATE", "info: ", info)
 	cq := m.clusterQueues[q.ClusterQueue]
 	if cq == nil {
 		return false
 	}
+	log.Info("[VICENTE] REQUEUEWORKLOAD AFTER CQ IS NOT NIL", "info: ", info)
 
 	added := cq.RequeueIfNotPresent(info, reason)
+	log.Info("[VICENTE] REQUEUEWORKLOAD AFTER REQUEUE IF NOT PRESENT", "info: ", info)
 	m.reportPendingWorkloads(q.ClusterQueue, cq)
+	log.Info("[VICENTE] REQUEUEWORKLOAD AFTER REPORT PENDING WORKLOADES", "info: ", info)
 	if added {
 		m.Broadcast()
 	}

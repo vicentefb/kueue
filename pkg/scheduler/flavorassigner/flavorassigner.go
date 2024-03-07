@@ -250,7 +250,7 @@ func lastAssignmentOutdated(wl *workload.Info, cq *cache.ClusterQueue) bool {
 // The result for each pod set is accompanied with reasons why the flavor can't
 // be assigned immediately. Each assigned flavor is accompanied with a
 // FlavorAssignmentMode.
-func (a *FlavorAssigner) Assign(log logr.Logger, counts []int32, resizeable bool) Assignment {
+func (a *FlavorAssigner) Assign(log logr.Logger, counts []int32) Assignment {
 	if a.wl.LastAssignment != nil && lastAssignmentOutdated(a.wl, a.cq) {
 		if logV := log.V(6); logV.Enabled() {
 			keysValues := []any{
@@ -269,9 +269,6 @@ func (a *FlavorAssigner) Assign(log logr.Logger, counts []int32, resizeable bool
 	}
 
 	requests := a.wl.TotalRequests
-	if resizeable {
-		requests = a.wl.PendingRequests
-	}
 
 	if len(counts) == 0 {
 		log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN COUNTS IS 0 THIS IS CALLED FROM THE SCHEDULER ", "REQUESTS", requests)
@@ -328,10 +325,12 @@ func (a *FlavorAssigner) assignFlavors(log logr.Logger, requests []workload.PodS
 		}
 
 		assignment.append(podSet.Requests, &psAssignment)
+		log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN FLAVORS LOOP", "assignment", assignment)
 		if psAssignment.Status.IsError() || (len(podSet.Requests) > 0 && len(psAssignment.Flavors) == 0) {
 			return assignment
 		}
 	}
+	log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN FLAVORS", "assignment", assignment)
 	return assignment
 }
 
