@@ -326,9 +326,6 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 				e.inadmissibleMsg = e.assignment.Message()
 				e.Info.LastAssignment = &e.assignment.LastState
 				e.status = assumed
-
-				log.Info("[VICENTE] ADDING ENTRY FOR RESIZE", "RESIZE", e)
-				log.Info("[VICENTE] WORKLOAD", "W", w)
 				if err := s.updateResizePodSetAssignments(ctx, e); err != nil {
 					log.Error(err, "Could not apploy admission to assumed workload")
 					continue

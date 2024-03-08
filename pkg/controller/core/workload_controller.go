@@ -588,14 +588,29 @@ func (r *WorkloadReconciler) Update(e event.UpdateEvent) bool {
 		if err := r.cache.UpdateWorkload(oldWl, wlCopy); err != nil {
 			log.Error(err, "Updating workload in cache")
 		}
-		// This forces you to go through the scheduler to update PodSetAssignments for example.
-		log.Info("[VICENTE] UPDATING WORKLOAD INSIDE WORKLOAD CONTROLLER THROUGH THE QUEUE", "WORKLOAD", wlCopy.Spec)
-		if features.Enabled(features.DynamicallySizedJobs) && !r.queues.UpdateWorkload(oldWl, wlCopy) {
+		// This forces you to go through the scheduler to update PodSetAssignments if there's a difference between the
+		// worker group podSetAssignments.Count of the old and new workload
+		updatePsa := compareAdmissionPodSetAssignmentCount(oldWl.Status.Admission, wlCopy.Status.Admission)
+		if features.Enabled(features.DynamicallySizedJobs) && updatePsa && !r.queues.UpdateWorkload(oldWl, wlCopy) {
 			log.V(2).Info("Queue for updated workload didn't exist; ignoring for now")
 		}
 	}
 
 	return true
+}
+
+func compareAdmissionPodSetAssignmentCount(oldWlAdmission *kueue.Admission, newWlAdmisson *kueue.Admission) bool {
+	// this is specific to RayClusters, it contains a PodSet of length 2, containing head and workers
+	oldWlPsa := len(oldWlAdmission.PodSetAssignments)
+	newWlPsa := len(newWlAdmisson.PodSetAssignments)
+	if oldWlPsa == 2 && oldWlPsa == newWlPsa {
+		if oldWlAdmission.PodSetAssignments[1].Name == newWlAdmisson.PodSetAssignments[1].Name {
+			if oldWlAdmission.PodSetAssignments[1].Count != newWlAdmisson.PodSetAssignments[1].Count {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (r *WorkloadReconciler) Generic(e event.GenericEvent) bool {
