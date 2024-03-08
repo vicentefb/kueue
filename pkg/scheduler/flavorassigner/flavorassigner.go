@@ -268,18 +268,14 @@ func (a *FlavorAssigner) Assign(log logr.Logger, counts []int32) Assignment {
 		a.wl.LastAssignment = nil
 	}
 
-	requests := a.wl.TotalRequests
-
 	if len(counts) == 0 {
-		log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN COUNTS IS 0 THIS IS CALLED FROM THE SCHEDULER ", "REQUESTS", requests)
-		return a.assignFlavors(log, requests)
+		return a.assignFlavors(log, a.wl.TotalRequests)
 	}
 
 	currentResources := make([]workload.PodSetResources, len(a.wl.TotalRequests))
 	for i := range a.wl.TotalRequests {
 		currentResources[i] = *a.wl.TotalRequests[i].ScaledTo(counts[i])
 	}
-	log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN CURRENT RESOURCES FOR THE WORKLOAD", "CURRENTRESOURCES", currentResources)
 	return a.assignFlavors(log, currentResources)
 }
 
@@ -325,12 +321,10 @@ func (a *FlavorAssigner) assignFlavors(log logr.Logger, requests []workload.PodS
 		}
 
 		assignment.append(podSet.Requests, &psAssignment)
-		log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN FLAVORS LOOP", "assignment", assignment)
 		if psAssignment.Status.IsError() || (len(podSet.Requests) > 0 && len(psAssignment.Flavors) == 0) {
 			return assignment
 		}
 	}
-	log.Info("[VICENTE] FLAVOR ASSIGNER INSIDE ASSIGN FLAVORS", "assignment", assignment)
 	return assignment
 }
 

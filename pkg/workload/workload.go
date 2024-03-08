@@ -91,11 +91,6 @@ func (s *AssignmentClusterQueueState) NextFlavorToTryForPodSetResource(ps int, r
 	return idx + 1
 }
 
-type Resize struct {
-	TypeOfResize string
-	Name         string
-}
-
 // Info holds a Workload object and some pre-processing.
 type Info struct {
 	Obj *kueue.Workload
@@ -109,8 +104,6 @@ type Info struct {
 	// List of total resources already admitted.
 	// Only applicable for resizeable jobs.
 	AdmittedRequests []PodSetResources
-
-	TypeOfResize Resize
 }
 
 type PodSetResources struct {
@@ -143,7 +136,6 @@ func NewInfo(w *kueue.Workload) *Info {
 	if w.Status.Admission != nil {
 		info.ClusterQueue = string(w.Status.Admission.ClusterQueue)
 		info.TotalRequests = totalRequestsFromAdmission(w)
-		info.TypeOfResize = diffRequestsFromPodSets(w)
 	} else {
 		info.TotalRequests = totalRequestsFromPodSets(w)
 	}
@@ -249,34 +241,6 @@ func totalRequestsFromAdmission(wl *kueue.Workload) []PodSetResources {
 		res = append(res, setRes)
 	}
 	return res
-}
-
-func diffRequestsFromPodSets(wl *kueue.Workload) Resize {
-	totalResources := totalRequestsFromPodSets(wl)
-	admittedResources := totalRequestsFromAdmission(wl)
-	TypeOfResize := Resize{TypeOfResize: "", Name: ""}
-	for _, totalResource := range totalResources {
-		var matchedResource PodSetResources
-		// find the matching resource in admitted request.
-		for _, admittedResource := range admittedResources {
-			if admittedResource.Name == totalResource.Name {
-				matchedResource = admittedResource
-				break
-			}
-		}
-
-		diff := matchedResource.Count - totalResource.Count
-		if diff < 0 {
-			TypeOfResize = Resize{TypeOfResize: "scale-down", Name: matchedResource.Name}
-
-		} else if diff == 0 {
-			TypeOfResize = Resize{TypeOfResize: "no-scale", Name: matchedResource.Name}
-		} else {
-			TypeOfResize = Resize{TypeOfResize: "scale-up", Name: matchedResource.Name}
-		}
-
-	}
-	return TypeOfResize
 }
 
 // The following resources calculations are inspired on

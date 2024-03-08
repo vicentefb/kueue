@@ -426,12 +426,8 @@ func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap
 
 func (s *Scheduler) getAssignments(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
-	aa := wl.Obj.Status.Admission
-	log.Info("adf", "a", aa)
 	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
-	log.Info("[VICENTE] INSIDE GETASSIGNMENTS", "FLAVOR ASSIGNER", flvAssigner)
 	fullAssignment := flvAssigner.Assign(log, nil)
-	log.Info("[VICENTE] INSIDE GETASSIGNMENTS", "FULLASSIGNMENT", fullAssignment)
 	var faPreemtionTargets []*workload.Info
 
 	arm := fullAssignment.RepresentativeMode()
@@ -532,17 +528,13 @@ func (s *Scheduler) validateLimitRange(ctx context.Context, wi *workload.Info) e
 // the entry, and asynchronously updates the object in the apiserver after
 // assuming it in the cache.
 func (s *Scheduler) updateResizePodSetAssignments(ctx context.Context, e entry) error {
-	log := ctrl.LoggerFrom(ctx)
 	newWorkload := e.Obj.DeepCopy()
 	admission := &kueue.Admission{
 		ClusterQueue:      kueue.ClusterQueueReference(e.ClusterQueue),
 		PodSetAssignments: e.assignment.ToAPI(),
 	}
-	log.Info("[VICENTE] updateResizePodSetAssignments PODSETASSIGNMENTS", "PODS", admission.PodSetAssignments)
 
 	workload.SetQuotaReservation(newWorkload, admission)
-	log.Info("[VICENTE] updateResizePodSetAssignments SET QUOTA RESERVATION", "newWorkload", newWorkload.Spec)
-	log.Info("[VICENTE] updateResizePodSetAssignments SET QUOTA RESERVATION", "newWorkload", newWorkload.Status.Admission)
 	_ = workload.SyncAdmittedCondition(newWorkload)
 
 	if e.status == assumed {
@@ -565,18 +557,12 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 		ClusterQueue:      kueue.ClusterQueueReference(e.ClusterQueue),
 		PodSetAssignments: e.assignment.ToAPI(),
 	}
-	log.Info("[VICENTE] ADMIT PODSETASSIGNMENTS", "PODS", admission.PodSetAssignments)
-
 	workload.SetQuotaReservation(newWorkload, admission)
-	log.Info("[VICENTE] ADMIT SET QUOTA RESERVATION", "newWorkload", newWorkload.Spec)
-	log.Info("[VICENTE] ADMIT SET QUOTA RESERVATION", "newWorkload", newWorkload.Status.Admission)
 	if workload.HasAllChecks(newWorkload, mustHaveChecks) {
 		// sync Admitted, ignore the result since an API update is always done.
-		log.Info("[VICENTE] ADMIT HAS ALL CHECKS", "newWorkload", mustHaveChecks)
 		_ = workload.SyncAdmittedCondition(newWorkload)
 
 	}
-
 	if err := s.cache.AssumeWorkload(newWorkload); err != nil {
 		return err
 	}
@@ -585,9 +571,7 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 
 	s.admissionRoutineWrapper.Run(func() {
 		err := s.applyAdmission(ctx, newWorkload)
-		log.Info("[VICENTE] ADMIT AFTER APPLYING ADMISSION ON NEW WORKLOAD", "newWorkload", newWorkload)
 		if err == nil {
-			log.Info("[VICENTE] ADMIT AFTER APPLYING ADMISSION ERROR IS NIL", "newWorkload", newWorkload)
 			waitStarted := e.Obj.CreationTimestamp.Time
 			if c := apimeta.FindStatusCondition(e.Obj.Status.Conditions, kueue.WorkloadEvicted); c != nil {
 				waitStarted = c.LastTransitionTime.Time
@@ -601,7 +585,6 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 			log.V(2).Info("Workload successfully admitted and assigned flavors", "assignments", admission.PodSetAssignments)
 			return
 		}
-		log.Info("[VICENTE] ADMIT AFTER APPLYING ADMISSION ERROR COULD BE NOT NIL", "ERROR", err)
 		// Ignore errors because the workload or clusterQueue could have been deleted
 		// by an event.
 		_ = s.cache.ForgetWorkload(newWorkload)
