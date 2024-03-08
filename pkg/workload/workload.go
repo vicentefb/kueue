@@ -100,10 +100,6 @@ type Info struct {
 	// already admitted.
 	ClusterQueue   string
 	LastAssignment *AssignmentClusterQueueState
-
-	// List of total resources already admitted.
-	// Only applicable for resizeable jobs.
-	AdmittedRequests []PodSetResources
 }
 
 type PodSetResources struct {
@@ -132,7 +128,6 @@ func NewInfo(w *kueue.Workload) *Info {
 	info := &Info{
 		Obj: w,
 	}
-
 	if w.Status.Admission != nil {
 		info.ClusterQueue = string(w.Status.Admission.ClusterQueue)
 		info.TotalRequests = totalRequestsFromAdmission(w)

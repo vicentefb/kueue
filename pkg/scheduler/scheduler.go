@@ -557,11 +557,11 @@ func (s *Scheduler) admit(ctx context.Context, e *entry, mustHaveChecks sets.Set
 		ClusterQueue:      kueue.ClusterQueueReference(e.ClusterQueue),
 		PodSetAssignments: e.assignment.ToAPI(),
 	}
+
 	workload.SetQuotaReservation(newWorkload, admission)
 	if workload.HasAllChecks(newWorkload, mustHaveChecks) {
 		// sync Admitted, ignore the result since an API update is always done.
 		_ = workload.SyncAdmittedCondition(newWorkload)
-
 	}
 	if err := s.cache.AssumeWorkload(newWorkload); err != nil {
 		return err
