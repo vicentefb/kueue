@@ -205,23 +205,19 @@ var _ = ginkgo.Describe("RayCluster controller", ginkgo.Ordered, ginkgo.Continue
 			return apimeta.IsStatusConditionTrue(createdWorkload.Status.Conditions, kueue.WorkloadQuotaReserved)
 		}, util.Timeout, util.Interval).Should(gomega.BeTrue())
 
-		ginkgo.By("checking the job gets suspended when parallelism changes and the added node selectors are removed")
+		ginkgo.By("checking the job is not suspended when parallelism changes and the added node selectors are not removed")
 		parallelism := ptr.Deref(job.Spec.WorkerGroupSpecs[0].Replicas, 1)
 		newParallelism := parallelism + 1
 		createdJob.Spec.WorkerGroupSpecs[0].Replicas = &newParallelism
 		gomega.Expect(k8sClient.Update(ctx, createdJob)).Should(gomega.Succeed())
-		/*
-			gomega.Eventually(func() bool {
-				if err := k8sClient.Get(ctx, lookupKey, createdJob); err != nil {
-					return false
-				}
-				return *createdJob.Spec.Suspend && len(createdJob.Spec.WorkerGroupSpecs[0].Template.Spec.NodeSelector) == 0
-			}, util.Timeout, util.Interval).Should(gomega.BeTrue())
-			gomega.Eventually(func() bool {
-				ok, _ := testing.CheckLatestEvent(ctx, k8sClient, "DeletedWorkload", corev1.EventTypeNormal, fmt.Sprintf("Deleted not matching Workload: %v", wlLookupKey.String()))
-				return ok
-			}, util.Timeout, util.Interval).Should(gomega.BeTrue())
-		*/
+
+		gomega.Eventually(func() bool {
+			if err := k8sClient.Get(ctx, lookupKey, createdJob); err != nil {
+				return false
+			}
+			return !*createdJob.Spec.Suspend && len(createdJob.Spec.WorkerGroupSpecs[0].Template.Spec.NodeSelector) != 0
+		}, util.Timeout, util.Interval).Should(gomega.BeTrue())
+
 		ginkgo.By("checking the workload is updated with new count")
 		gomega.Eventually(func() bool {
 			if err := k8sClient.Get(ctx, wlLookupKey, createdWorkload); err != nil {
@@ -229,7 +225,7 @@ var _ = ginkgo.Describe("RayCluster controller", ginkgo.Ordered, ginkgo.Continue
 			}
 			return createdWorkload.Spec.PodSets[1].Count == newParallelism
 		}, util.Timeout, util.Interval).Should(gomega.BeTrue())
-		//gomega.Expect(createdWorkload.Status.Admission).Should(gomega.BeNil())
+		gomega.Expect(createdWorkload.Status.Admission).ShouldNot(gomega.BeNil())
 
 		ginkgo.By("checking the job is unsuspended and selectors added when workload is assigned again")
 		gomega.Expect(util.SetQuotaReservation(ctx, k8sClient, createdWorkload, admission)).Should(gomega.Succeed())
@@ -537,9 +533,8 @@ var _ = ginkgo.Describe("RayCluster Job controller interacting with scheduler", 
 		ns                  *corev1.Namespace
 		onDemandFlavor      *kueue.ResourceFlavor
 		spotUntaintedFlavor *kueue.ResourceFlavor
-		//scaleFlavors        *kueue.ResourceFlavor
-		clusterQueue *kueue.ClusterQueue
-		localQueue   *kueue.LocalQueue
+		clusterQueue        *kueue.ClusterQueue
+		localQueue          *kueue.LocalQueue
 	)
 
 	ginkgo.BeforeEach(func() {
@@ -556,14 +551,10 @@ var _ = ginkgo.Describe("RayCluster Job controller interacting with scheduler", 
 		spotUntaintedFlavor = testing.MakeResourceFlavor("spot-untainted").Label(instanceKey, "spot-untainted").Obj()
 		gomega.Expect(k8sClient.Create(ctx, spotUntaintedFlavor)).Should(gomega.Succeed())
 
-		//scaleFlavors = testing.MakeResourceFlavor("scale-flavors").Label(instanceKey, "scale-flavors").Obj()
-		//gomega.Expect(k8sClient.Create(ctx, scaleFlavors)).Should(gomega.Succeed())
-
 		clusterQueue = testing.MakeClusterQueue("dev-clusterqueue").
 			ResourceGroup(
 				*testing.MakeFlavorQuotas("spot-untainted").Resource(corev1.ResourceCPU, "4").Obj(),
 				*testing.MakeFlavorQuotas("on-demand").Resource(corev1.ResourceCPU, "4").Obj(),
-				//*testing.MakeFlavorQuotas("scale-flavors").Resource(corev1.ResourceCPU, "20").Obj(),
 			).Obj()
 		gomega.Expect(k8sClient.Create(ctx, clusterQueue)).Should(gomega.Succeed())
 	})
@@ -572,7 +563,6 @@ var _ = ginkgo.Describe("RayCluster Job controller interacting with scheduler", 
 		util.ExpectClusterQueueToBeDeleted(ctx, k8sClient, clusterQueue, true)
 		util.ExpectResourceFlavorToBeDeleted(ctx, k8sClient, onDemandFlavor, true)
 		util.ExpectResourceFlavorToBeDeleted(ctx, k8sClient, spotUntaintedFlavor, true)
-		//util.ExpectResourceFlavorToBeDeleted(ctx, k8sClient, scaleFlavors, true)
 	})
 
 	ginkgo.It("Should schedule jobs as they fit in their ClusterQueue", func() {
