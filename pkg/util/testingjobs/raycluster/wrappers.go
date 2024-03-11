@@ -74,6 +74,51 @@ func MakeCluster(name, ns string) *ClusterWrapper {
 	}}
 }
 
+// MakeCluster creates a wrapper for rayCluster
+func MakeClusterReplicas(name, ns string) *ClusterWrapper {
+	return &ClusterWrapper{rayv1.RayCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   ns,
+			Annotations: make(map[string]string, 1),
+		},
+		Spec: rayv1.RayClusterSpec{
+			HeadGroupSpec: rayv1.HeadGroupSpec{
+				RayStartParams: map[string]string{"p1": "v1"},
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						NodeSelector: map[string]string{},
+						Containers: []corev1.Container{
+							{
+								Name: "head-container",
+							},
+						},
+					},
+				},
+			},
+			WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
+				{
+					GroupName:      "workers-group-0",
+					Replicas:       ptr.To[int32](4),
+					MinReplicas:    ptr.To[int32](0),
+					MaxReplicas:    ptr.To[int32](10),
+					RayStartParams: map[string]string{"p1": "v1"},
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "worker-container",
+								},
+							},
+						},
+					},
+				},
+			},
+			Suspend: ptr.To(true),
+		},
+	}}
+}
+
 // NodeSelector adds a node selector to the job's head.
 func (j *ClusterWrapper) NodeSelectorHeadGroup(k, v string) *ClusterWrapper {
 	j.Spec.HeadGroupSpec.Template.Spec.NodeSelector[k] = v
