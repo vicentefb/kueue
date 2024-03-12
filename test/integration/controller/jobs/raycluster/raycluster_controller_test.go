@@ -636,7 +636,7 @@ var _ = ginkgo.Describe("RayCluster Job controller interacting with scheduler", 
 		gomega.Expect(k8sClient.Create(ctx, localQueue)).Should(gomega.Succeed())
 
 		ginkgo.By("checking a dev job starts")
-		job := testingraycluster.MakeClusterReplicas("dev-job", ns.Name).Queue(localQueue.Name).
+		job := testingraycluster.MakeCluster("dev-job", ns.Name).SetReplicaCount(4).Queue(localQueue.Name).
 			RequestHead(corev1.ResourceCPU, "1").
 			RequestWorkerGroup(corev1.ResourceCPU, "1").
 			Obj()
