@@ -177,7 +177,6 @@ func (s *Scheduler) schedule(ctx context.Context) {
 	// 1. Get the heads from the queues, including their desired clusterQueue.
 	// This operation blocks while the queues are empty.
 	headWorkloads := s.queues.Heads(ctx)
-	log.Info("[VICENTE] INSIDE SCHEDULE ", "HEADWORKLOADS", headWorkloads)
 	// If there are no elements, it means that the program is finishing.
 	if len(headWorkloads) == 0 {
 		return
@@ -187,11 +186,9 @@ func (s *Scheduler) schedule(ctx context.Context) {
 	// 2. Take a snapshot of the cache.
 	snapshot := s.cache.Snapshot()
 	logSnapshotIfVerbose(log, &snapshot)
-	log.Info("[VICENTE] TAKE A SNAPSHOT", "SNAPSHOT", snapshot)
 
 	// 3. Calculate requirements (resource flavors, borrowing) for admitting workloads.
 	entries := s.nominate(ctx, headWorkloads, snapshot)
-	log.Info("[VICENTE] NOMINATED ENTRIES", "ENTRIES", entries)
 
 	// 4. Sort entries based on borrowing, priorities (if enabled) and timestamps.
 	sort.Sort(entryOrdering{
@@ -314,7 +311,6 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 	log := ctrl.LoggerFrom(ctx)
 	entries := make([]entry, 0, len(workloads))
 	for _, w := range workloads {
-		log.Info("[VICENTE] ENTER FOR LOOP", "RESIZE", w)
 		log := log.WithValues("workload", klog.KObj(w.Obj), "clusterQueue", klog.KRef("", w.ClusterQueue))
 		cq := snap.ClusterQueues[w.ClusterQueue]
 		ns := corev1.Namespace{}
@@ -351,7 +347,6 @@ func (s *Scheduler) nominate(ctx context.Context, workloads []workload.Info, sna
 		} else if err := s.validateLimitRange(ctx, &w); err != nil {
 			e.inadmissibleMsg = err.Error()
 		} else {
-			log.Info("[VICENTE] WORKLOAD ISNT ASSUMED", "ENTRIES", entries)
 			e.assignment, e.preemptionTargets = s.getAssignments(log, &e.Info, &snap)
 			e.inadmissibleMsg = e.assignment.Message()
 			e.Info.LastAssignment = &e.assignment.LastState
@@ -401,14 +396,11 @@ type partialAssignment struct {
 func (s *Scheduler) getResizeAssignment(log logr.Logger, wl *workload.Info, snap *cache.Snapshot) (flavorassigner.Assignment, []*workload.Info) {
 	cq := snap.ClusterQueues[wl.ClusterQueue]
 	flvAssigner := flavorassigner.New(wl, cq, snap.ResourceFlavors)
-	log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS", "FLAVOR ASSIGNER", flvAssigner)
 	resizeAssignment := flvAssigner.Assign(log, nil)
-	log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS", "RESIZE ASSIGNMENT", resizeAssignment)
 	var faPreemtionTargets []*workload.Info
 
 	arm := resizeAssignment.RepresentativeMode()
 	if arm == flavorassigner.Fit {
-		log.Info("[VICENTE] INSIDE RESIZEASSIGNMENTS TEHRE IS A FIT", "RESIZE ASSIGNMENT", resizeAssignment)
 		return resizeAssignment, nil
 	}
 
