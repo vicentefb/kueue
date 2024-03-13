@@ -532,7 +532,6 @@ func (s *Scheduler) updateResizePodSetAssignments(ctx context.Context, e entry) 
 	if e.status == assumed {
 		// Apply admission means to update the workload with the new admission status, this is for the case of a scale down
 		// we shouldn't requeue a scale down we should only update the workload
-		//
 		return s.applyAdmission(ctx, newWorkload)
 	}
 
