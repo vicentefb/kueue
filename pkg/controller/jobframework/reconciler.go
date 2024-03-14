@@ -349,21 +349,18 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 	}
 
 	// 4.1 update podSetCount for RayCluster resize
-	if features.Enabled(features.DynamicallySizedJobs) && wl != nil && workload.IsAdmitted(wl) {
+	if features.Enabled(features.DynamicallySizedJobs) && wl != nil && workload.IsAdmitted(wl) && job.GVK().Kind == "RayCluster" {
 		podSets := job.PodSets()
-		if len(podSets) == 2 {
-			jobPodSetCount := podSets[1].Count
-			workloadPodSetCount := wl.Spec.PodSets[1].Count
-			if workloadPodSetCount != jobPodSetCount {
-				toUpdate := wl
-				_, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate, "Updated Workload due to resize: %v")
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, nil
+		jobPodSetCount := podSets[1].Count
+		workloadPodSetCount := wl.Spec.PodSets[1].Count
+		if workloadPodSetCount != jobPodSetCount {
+			toUpdate := wl
+			_, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate, "Updated Workload due to resize: %v")
+			if err != nil {
+				return ctrl.Result{}, err
 			}
+			return ctrl.Result{}, nil
 		}
-
 	}
 
 	// 5. handle WaitForPodsReady only for a standalone job.
