@@ -353,7 +353,7 @@ func (r *JobReconciler) ReconcileGenericJob(ctx context.Context, req ctrl.Reques
 		podSets := job.PodSets()
 		jobPodSetCount := podSets[1].Count
 		workloadPodSetCount := wl.Spec.PodSets[1].Count
-		if workloadPodSetCount != jobPodSetCount {
+		if workloadPodSetCount > jobPodSetCount {
 			toUpdate := wl
 			_, err := r.updateWorkloadToMatchJob(ctx, job, object, toUpdate, "Updated Workload due to resize: %v")
 			if err != nil {
@@ -695,7 +695,7 @@ func equivalentToWorkload(ctx context.Context, c client.Client, job GenericJob, 
 	jobPodSets := clearMinCountsIfFeatureDisabled(job.PodSets())
 
 	if runningPodSets := expectedRunningPodSets(ctx, c, wl); runningPodSets != nil {
-		if equality.ComparePodSetSlices(jobPodSets, runningPodSets) || features.Enabled(features.DynamicallySizedJobs) {
+		if equality.ComparePodSetSlices(jobPodSets, runningPodSets) || (features.Enabled(features.DynamicallySizedJobs) && job.GVK().Kind == "RayCluster") {
 			return true
 		}
 		// If the workload is admitted but the job is suspended, do the check
